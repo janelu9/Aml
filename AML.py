@@ -10,14 +10,15 @@ from pyspark.rdd import portable_hash
 from functools import reduce
 from pyspark.sql import HiveContext,SparkSession
 from pyspark.conf import SparkConf
+import pyspark.sql.functions as F
+import pyspark.sql.types as T
+
 conf = SparkConf()
 conf.set("spark.hadoop.mapred.output.compress", "false")
 spark = SparkSession.builder.config(conf=conf).enableHiveSupport().getOrCreate()
 sc=spark.sparkContext
 hc=HiveContext(sc)
-import pyspark.sql.functions as F
-import pyspark.sql.types as T
-df=hc.read.parquet("hdfs://localhost:9000/df")
+df=hc.read.parquet("hdfs://localhost:9000/data")
 uniq_edge=df.selectExpr('accname a','Cntpty_Acct_Name b ').filter('a<>b ').groupby(['a','b']).max()
 uniq_edge.persist()
 aconts=uniq_edge.selectExpr('a as n').groupby(['n']).max().union(uniq_edge.selectExpr('b as n').groupby(['n']).max()).groupby('n').max()
@@ -300,5 +301,5 @@ def flatValue(iterator):
     for *i,s in iterator:
         for payid in sorted(s):
             yield i+[int(payid)]
-RESULT_rdd2=RESULT_rdd.mapPartitions(flatValue).toDF('''batch_id: int, src: string, dst: string, amount_sum: float, degree: int, id: int''')
-RESULT_rdd2.join(df,'id','left').repartition(1).write.parquet("hdfs://localhost:9000/RESULT_rdd2",mode='overwrite')
+RESULT_rdd2=RESULT_rdd.mapPartitions(flatValue).toDF('''batch_id: int, src: string, dst: string, amount_sum: float, depth: int, id: int''')
+RESULT_rdd2.join(df,'id','left').repartition(1).write.parquet("hdfs://localhost:9000/RESULT",mode='overwrite')
