@@ -20,7 +20,7 @@ For example：
 
 You can run
 ` spark-submit  aml.py`
-to get all the payment chains seem like money laundering. The same 'batch_id' indicates these transactions belong to a complete chain. The field 'depth' indicates the length of the chain. 
+to get the payment chains seem like money laundering. The same 'batch_id' indicates these transactions belong to a complete chain. The field 'depth' indicates the length of the chain. 
 
  |  id|batch_id|src|dst|amount_sum|depth|accname|  Event_Dt|Tx_Amt|Cntpty_Acct_Name|
  | ---- | -------- | --- | --- | ---------- | ------ | ------- | ---------- | -------- | -------- |
