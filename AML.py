@@ -42,8 +42,8 @@ def f(iterator):
 data_values=df.select(['accname', 'Tx_Amt', 'Cntpty_Acct_Name', 'id', 'daystamp','lag']).rdd.mapPartitions(f).toDF().toPandas().values
 D={}
 for a,m,b,k,t,l in data_values:
-    a=name2id[a]
-    b=name2id[b]
+    a=name2id[a.strip().lower()]
+    b=name2id[b.strip().lower()]
     if a!=b:
         if a not in D:
             D[a]={b:[[k,t,l,m]]}
