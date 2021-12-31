@@ -1,5 +1,4 @@
-# aml
-anti-money laundering
+# Anti-money laundering
 
 Dedect relationship between A and E by tracing through payments with similar amounts and identifying payment chains.
 
