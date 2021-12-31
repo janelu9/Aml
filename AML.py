@@ -10,8 +10,6 @@ from pyspark.rdd import portable_hash
 from functools import reduce
 from pyspark.sql import HiveContext,SparkSession
 from pyspark.conf import SparkConf
-import pyspark.sql.functions as F
-import pyspark.sql.types as T
 
 conf = SparkConf()
 conf.set("spark.hadoop.mapred.output.compress", "false")
@@ -23,9 +21,7 @@ uniq_edge=df.selectExpr('accname a','Cntpty_Acct_Name b ').filter('a<>b ').group
 uniq_edge.persist()
 aconts=uniq_edge.selectExpr('a as n').groupby(['n']).max().union(uniq_edge.selectExpr('b as n').groupby(['n']).max()).groupby('n').max()
 x=aconts.toPandas().values
-name2id={}
-for i,j in enumerate(x):
-    name2id[j[0]]=i
+name2id={j[0]:i for i,j in enumerate(x)}
 uniq_edge_pd=uniq_edge.rdd.map(lambda x:(name2id[x[0]],name2id[x[1]])).toDF(['a','b']).toPandas()
 uniq_edge.unpersist()
 id2name={v:k for k,v in name2id.items()}
@@ -273,7 +269,6 @@ def search(iterator):
                 for r in binary_search(st_amts,ed_amts,batch,nodes,st_tx,st_ed,ed_tx,ed_st):
                     yield r
 srcs_rdd4=srcs_rdd3.mapPartitions(search).distinct()
-LIMIT=10
 srcs_rdd3_part=srcs_rdd2.mapPartitions(search).distinct()
 result=srcs_rdd4.collect()
 results3=srcs_rdd3_part.collect()
