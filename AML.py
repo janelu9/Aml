@@ -3,13 +3,13 @@
 #Created on Thu Nov 9 10:38:29 2021
 #@author: Jane
 
+from pyspark.rdd import portable_hash
+from pyspark.sql import HiveContext,SparkSession
+from pyspark.conf import SparkConf
 from scipy.sparse import csr_matrix
 import numpy as np
 from queue import deque
-from pyspark.rdd import portable_hash
 from functools import reduce
-from pyspark.sql import HiveContext,SparkSession
-from pyspark.conf import SparkConf
 
 conf = SparkConf()
 conf.set("spark.hadoop.mapred.output.compress", "false")
