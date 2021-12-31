@@ -3,13 +3,13 @@
 #Created on Thu Nov 9 10:38:29 2021
 #@author: Jane
 
-from pyspark.rdd import portable_hash
-from pyspark.sql import HiveContext,SparkSession
-from pyspark.conf import SparkConf
 from scipy.sparse import csr_matrix
 import numpy as np
 from queue import deque
+from pyspark.rdd import portable_hash
 from functools import reduce
+from pyspark.sql import HiveContext,SparkSession
+from pyspark.conf import SparkConf
 
 conf = SparkConf()
 conf.set("spark.hadoop.mapred.output.compress", "false")
@@ -273,8 +273,8 @@ srcs_rdd3_part=srcs_rdd2.mapPartitions(search).distinct()
 result=srcs_rdd4.collect()
 results3=srcs_rdd3_part.collect()
 r=deque()
-r.extend(sorted(result,key=lambda x:sum(map(len,x[2:-2]))))
-r.extend(sorted(results3,key=lambda x:sum(map(len,x[2:-2]))))
+r.extend(sorted(result,key=lambda x:-sum(map(len,x[2:-2]))))
+r.extend(sorted(results3,key=lambda x:-sum(map(len,x[2:-2]))))
 item=r.popleft()
 union=lambda x,y:x|y
 s=reduce(union,map(set,item[2:-2]))
