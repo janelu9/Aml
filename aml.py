@@ -17,7 +17,7 @@ spark = SparkSession.builder.config(conf=conf).enableHiveSupport().getOrCreate()
 sc=spark.sparkContext
 hc=HiveContext(sc)
 df=hc.read.parquet("hdfs://localhost:9000/data")
-uniq_edge=df.selectExpr('accname a','Cntpty_Acct_Name b ').filter('a<>b ').groupby(['a','b']).max()
+uniq_edge=df.selectExpr('lower(trim(accname)) a','lower(trim(Cntpty_Acct_Name)) b ').filter('a<>b ').groupby(['a','b']).max()
 uniq_edge.persist()
 aconts=uniq_edge.selectExpr('a as n').groupby(['n']).max().union(uniq_edge.selectExpr('b as n').groupby(['n']).max()).groupby('n').max()
 x=aconts.toPandas().values
@@ -54,7 +54,7 @@ for a,m,b,k,t,l in data_values:
 for i in D:
     for j in D[i]:
         D[i][j]=np.array(sorted(D[i][j],key=lambda x:x[1]),dtype=float)
-T=5;SIGMA=0.05;max_depth=5;P=16;LIMIT=20
+T=5;SIGMA=0.05;max_depth=4;P=16;LIMIT=20
 srcs_rdd=sc.parallelize(srcs,min(P,len(srcs)))
 def prepares(srcs):
     for a in srcs:
