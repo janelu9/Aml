@@ -54,7 +54,7 @@ for a,m,b,k,t,l in data_values:
 for i in D:
     for j in D[i]:
         D[i][j]=np.array(sorted(D[i][j],key=lambda x:x[1]),dtype=float)
-T=5;SIGMA=0.05;max_depth=4;P=16;LIMIT=20
+T=5;SIGMA=0.05;max_depth=5;P=16;LIMIT=20
 srcs_rdd=sc.parallelize(srcs,min(P,len(srcs)))
 def prepares(srcs):
     for a in srcs:
@@ -272,25 +272,25 @@ srcs_rdd4=srcs_rdd3.mapPartitions(search).distinct()
 srcs_rdd3_part=srcs_rdd2.mapPartitions(search).distinct()
 result=srcs_rdd4.collect()
 results3=srcs_rdd3_part.collect()
-r=deque()
+r,RESULT=deque(),[]
 r.extend(sorted(result,key=lambda x:-sum(map(len,x[2:-2]))))
 r.extend(sorted(results3,key=lambda x:-sum(map(len,x[2:-2]))))
-item=r.popleft()
-union=lambda x,y:x|y
-s=reduce(union,map(set,item[2:-2]))
-increase_id=0
-RESULT=[[increase_id,id2name[item[0]],id2name[item[1]],float(item[-2]),item[-1],s]]
-while r:
+if r:
     item=r.popleft()
-    s=reduce(union,map(set,item[2:-2]))
-    not_sub=True
-    for S in RESULT:
-        if not (s-S[-1]):
-            not_sub=False
-            break
-    if not_sub:
-        increase_id+=1
-        RESULT.append([increase_id,id2name[item[0]],id2name[item[1]],float(item[-2]),item[-1],s])
+    union=lambda x,y:x|y
+    increase_id=0
+    RESULT.append([increase_id,id2name[item[0]],id2name[item[1]],float(item[-2]),item[-1],reduce(union,map(set,item[2:-2]))])
+    while r:
+        item=r.popleft()
+        s=reduce(union,map(set,item[2:-2]))
+        not_sub=True
+        for S in RESULT:
+            if not (s-S[-1]):
+                not_sub=False
+                break
+        if not_sub:
+            increase_id+=1
+            RESULT.append([increase_id,id2name[item[0]],id2name[item[1]],float(item[-2]),item[-1],s])
 RESULT_rdd=sc.parallelize(RESULT,P)
 def flatValue(iterator):
     for *i,s in iterator:
