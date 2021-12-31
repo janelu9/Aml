@@ -36,4 +36,4 @@ to get all the payment chains seem like money laundering. The same 'batch_id' in
 |5070|       1|  a|  c|     500.0|     3|      a|2020-01-03| 180.0|               b|
 |5072|       1|  a|  c|     500.0|     3|      b|2020-01-03| 500.0|               c|
 
-Enjoy it 🤗!
+Enjoy it ! 🤗
