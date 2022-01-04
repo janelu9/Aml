@@ -71,7 +71,7 @@ def prepares(srcs):
                                 e_bc= e_bc[cond_n,:] if np.any(cond_n) else e_bc[cond_w,:][0:1,:]
                                 for e_bc_i in e_bc:
                                     yield ((a,c,e_ab[1],e_bc_i[1]),[[a,b,c],[e_ab,e_bc_i]])
-srcs_rdd2=srcs_rdd.mapPartitions(prepares).repartitionAndSortWithinPartitions(P,partitionFunc=lambda x:portable_hash((x[0],x[1])),keyfunc=lambda x:(x[2],x[3]))
+srcs_rdd2=srcs_rdd.mapPartitions(prepares)
 def deep_search(iterator):
     for item in iterator:
         q=deque()
@@ -92,7 +92,7 @@ def deep_search(iterator):
                                 q.extend([[n+[n1],e+[e_Ai]] for e_Ai in e_A])
             else:
                 yield [(n[0],n[-1],e[0][1],e[-1][1]),(n,e)]
-srcs_rdd3=srcs_rdd2.mapPartitions(deep_search).repartitionAndSortWithinPartitions(P,partitionFunc=lambda x:portable_hash((x[0],x[1])),keyfunc=lambda x:(x[2],x[3]))
+srcs_rdd3=srcs_rdd2.mapPartitions(deep_search).repartitionAndSortWithinPartitions(P,partitionFunc=lambda x:portable_hash((x[0],x[1])))
 def check_out(pre_tx,pre_ed,cur_tx,cur_st,cur_ed):
     for idx,st in enumerate(cur_st):
         pre_get=pre_tx[pre_ed==st,:]
@@ -269,7 +269,7 @@ def search(iterator):
                 for r in binary_search(st_amts,ed_amts,batch,nodes,st_tx,st_ed,ed_tx,ed_st):
                     yield r
 srcs_rdd4=srcs_rdd3.mapPartitions(search).distinct()
-srcs_rdd3_part=srcs_rdd2.mapPartitions(search).distinct()
+srcs_rdd3_part=srcs_rdd2.repartitionAndSortWithinPartitions(P,partitionFunc=lambda x:portable_hash((x[0],x[1]))).mapPartitions(search).distinct()
 result=srcs_rdd4.collect()
 results3=srcs_rdd3_part.collect()
 r,RESULT=deque(),[]
