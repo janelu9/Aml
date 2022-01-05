@@ -54,7 +54,11 @@ for a,m,b,k,t,l in data_values:
 for i in D:
     for j in D[i]:
         D[i][j]=np.array(sorted(D[i][j],key=lambda x:x[1]),dtype=float)
-T=5;SIGMA=0.05;max_depth=4;P=16;LIMIT=20
+T=5;
+SIGMA=0.05;
+max_depth=4;
+P=16;
+LIMIT=20
 srcs_rdd=sc.parallelize(srcs,min(P,len(srcs)))
 def prepares(srcs):
     for a in srcs:
@@ -118,15 +122,15 @@ def income_expenditure_check_out(pre_tx,pre_ed,cur_tx,cur_st,cur_ed,pre_ed_set,c
 def binary_search(st_amts,ed_amts,batch,nodes,st_tx,st_ed,ed_tx,ed_st):
     amts=np.hstack([st_amts,ed_amts])
     pivot=len(st_amts)
-    upbound=min(sum(st_amts),sum(ed_amts))*(1+SIGMA)
+    upbound=min(sum(st_amts),sum(ed_amts))*(1+SIGMA)   
     select=[]
     sum_list=[]
     def sovler(bool_list=[], n=0):
-        st=sum([amts[i] for i in bool_list if  i< pivot])
+        st=sum([amts[i] for i in bool_list if  i< pivot])   
         ed=sum([amts[i] for i in bool_list if  i>=pivot],1e-5)
         if max(st,ed)>upbound:
             return
-        des=st/ed
+        des=st/ed    
         if abs(des-1)<=SIGMA:
             select.append(bool_list)
             sum_list.append(st)
@@ -145,21 +149,21 @@ def binary_search(st_amts,ed_amts,batch,nodes,st_tx,st_ed,ed_tx,ed_st):
             pre_ed=st_ed[st_index]
             lst_tx=ed_tx[ed_index,:]
             lst_st=ed_st[ed_index]
-            st_ids=pre_tx[:,0]
+            st_ids=pre_tx[:,0]            
             ed_ids=lst_tx[:,0]
             pre_ed_set=set(pre_ed)
             depth=len(nodes[0])
-            MID=[0]*(depth-3)
-            drop=False
-            for mid in range(1,depth-2):
+            MIDS=[]
+            def recurdive_search(pre_ed_set,pre_tx,pre_ed,MID=[],mid=1):
+                if mid > depth-3:
+                    MIDS.append([MID,(pre_ed_set,pre_tx,pre_ed)])
+                    return                     
                 cur_tx,cur_id=np.unique(batch[:,mid,:],axis=0,return_index=True)
-                cur_tx=cur_tx.reshape(-1,4)
                 cur_st,cur_ed=nodes[cur_id,mid],nodes[cur_id,mid+1]
                 cur_tx,cur_st,cur_ed=check_out(pre_tx,pre_ed,cur_tx,cur_st,cur_ed)
                 amts=cur_tx[:,-1]
                 if amts.sum()<(1-SIGMA)*AMOUNT:
-                    drop=True
-                    break
+                    return 
                 mid_indexs=[]
                 def sovler1(bool_list=[],n=0,asum=0):
                     des=asum/AMOUNT-1
@@ -173,28 +177,24 @@ def binary_search(st_amts,ed_amts,batch,nodes,st_tx,st_ed,ed_tx,ed_st):
                     sovler1(bool_list+[n],n+1,asum+amts[n])
                     sovler1(bool_list,n+1,asum)
                 sovler1()
-                if mid_indexs:
-                    for mid_index in mid_indexs:
-                        mid_ids=cur_tx[mid_index,0]
-                        cur_tx_tmp=cur_tx[mid_index,:]
-                        cur_st_tmp=cur_st[mid_index]
-                        cur_ed_tmp=cur_ed[mid_index]
-                        PASS,cur_ed_set=income_expenditure_check_out(pre_tx,pre_ed,cur_tx_tmp,cur_st_tmp,cur_ed_tmp,pre_ed_set)
-                        if PASS:
-                            pre_ed_set=cur_ed_set
-                            pre_tx,pre_ed=cur_tx_tmp,cur_ed_tmp
-                            MID[mid-1]=tuple(mid_ids)
-                            break
-                    if not PASS:
-                        drop=True
-                        break
-                else :
-                    drop=True
-                    break
-            if not drop:
-                PASS,_=income_expenditure_check_out(pre_tx,pre_ed,lst_tx,lst_st,lst_st,pre_ed_set)
-                if PASS:
-                    yield (int(nodes[0][0]),int(nodes[0][-1]),tuple(st_ids),*MID,tuple(ed_ids),AMOUNT,depth)                 
+                if not mid_indexs:
+                    return
+                for mid_index in mid_indexs:
+                    mid_ids = cur_tx[mid_index,0]
+                    cur_tx_tmp = cur_tx[mid_index,:]
+                    cur_st_tmp = cur_st[mid_index]
+                    cur_ed_tmp = cur_ed[mid_index]
+                    PASS,cur_ed_set=income_expenditure_check_out(pre_tx,pre_ed,cur_tx_tmp,cur_st_tmp,cur_ed_tmp,pre_ed_set)
+                    if PASS:
+                        recurdive_search(cur_ed_set,cur_tx_tmp,cur_ed_tmp,MID+[tuple(mid_ids)],mid+1)
+                    else:
+                        return
+            recurdive_search(pre_ed_set,pre_tx,pre_ed)
+            if MIDS:
+                for MID,(pre_ed_set,pre_tx,pre_ed) in MIDS:
+                    PASS,_=income_expenditure_check_out(pre_tx,pre_ed,lst_tx,lst_st,lst_st,pre_ed_set)
+                    if PASS:
+                        yield (int(nodes[0][0]),int(nodes[0][-1]),tuple(st_ids),*MID,tuple(ed_ids),AMOUNT,depth)                
 def fast_search(st_amts,ed_amts,batch,nodes,pre_tx,pre_ed,lst_tx,lst_st):
     AMOUNT=sum(ed_amts)
     if abs(AMOUNT/sum(st_amts,1e-5)-1)<=SIGMA:
