@@ -7,8 +7,6 @@ from pyspark.sql import HiveContext,SparkSession
 from pyspark.conf import SparkConf
 from pyspark.rdd import portable_hash
 from scipy.sparse import csr_matrix
-from queue import deque
-from functools import reduce
 import numpy as np
 
 conf = SparkConf()
@@ -59,7 +57,6 @@ SIGMA = 0.05;
 max_depth = 4;
 P = 16;
 LIMIT = 20
-srcs_rdd = sc.parallelize(srcs,min(P,len(srcs)))
 def prepares(srcs):
     for a in srcs:
         for b in D[a]:
@@ -75,13 +72,11 @@ def prepares(srcs):
                                 e_bc =  e_bc[cond_n,:] if np.any(cond_n) else e_bc[cond_w,:][0:1,:]
                                 for e_bc_i in e_bc:
                                     yield ((a,c,e_ab[1],e_bc_i[1]),[[a,b,c],[e_ab,e_bc_i]])
-srcs_rdd2 = srcs_rdd.mapPartitions(prepares)
 def deep_search(iterator):
     for item in iterator:
-        q = deque()
-        q.append(item[1])
+        q=[item[1]]
         while q:
-            n,e = q.popleft()
+            n,e = q.pop(0)
             if len(n)<max_depth:
                 Dn = D.get(n[-1],None)
                 if Dn is not None:
@@ -96,7 +91,6 @@ def deep_search(iterator):
                                 q.extend([[n+[n1],e+[e_Ai]] for e_Ai in e_A])
             else:
                 yield [(n[0],n[-1],e[0][1],e[-1][1]),(n,e)]
-srcs_rdd3 = srcs_rdd2.mapPartitions(deep_search).repartitionAndSortWithinPartitions(P,partitionFunc = lambda x:portable_hash((x[0],x[1])))
 def check_out(pre_tx,pre_ed,cur_tx,cur_st,cur_ed):
     for idx,st in enumerate(cur_st):
         pre_get = pre_tx[pre_ed == st,:]
@@ -117,7 +111,7 @@ def income_expenditure_check_out(pre_tx,pre_ed,cur_tx,cur_st,cur_ed,pre_ed_set):
                 return False,None
         return True,set(cur_ed)
     return False,None
-def binary_search(st_amts,ed_amts,batch,nodes,st_tx,st_ed,ed_tx,ed_st):
+def binary_search(st_amts,ed_amts,batch,node,st_tx,st_ed,ed_tx,ed_st):
     amts = np.hstack([st_amts,ed_amts])
     pivot = len(st_amts)
     upbound = min(sum(st_amts),sum(ed_amts))*(1+SIGMA)   
@@ -150,14 +144,14 @@ def binary_search(st_amts,ed_amts,batch,nodes,st_tx,st_ed,ed_tx,ed_st):
             st_ids = pre_tx[:,0]            
             ed_ids = lst_tx[:,0]
             pre_ed_set = set(pre_ed)
-            depth = len(nodes[0])
+            depth = len(node[0])
             MIDS = []
             def recurdive_search(pre_ed_set,pre_tx,pre_ed,MID = [],mid = 1):
                 if mid > depth-3:
                     MIDS.append([MID,(pre_ed_set,pre_tx,pre_ed)])
                     return                     
                 cur_tx,cur_id = np.unique(batch[:,mid,:],axis = 0,return_index = True)
-                cur_st,cur_ed = nodes[cur_id,mid],nodes[cur_id,mid+1]
+                cur_st,cur_ed = node[cur_id,mid],node[cur_id,mid+1]
                 cur_tx,cur_st,cur_ed = check_out(pre_tx,pre_ed,cur_tx,cur_st,cur_ed)
                 amts = cur_tx[:,-1]
                 if amts.sum()<(1-SIGMA)*AMOUNT:
@@ -184,7 +178,7 @@ def binary_search(st_amts,ed_amts,batch,nodes,st_tx,st_ed,ed_tx,ed_st):
                     cur_ed_tmp = cur_ed[mid_index]
                     PASS,cur_ed_set = income_expenditure_check_out(pre_tx,pre_ed,cur_tx_tmp,cur_st_tmp,cur_ed_tmp,pre_ed_set)
                     if PASS:
-                        recurdive_search(cur_ed_set,cur_tx_tmp,cur_ed_tmp,MID+[tuple(mid_ids)],mid+1)
+                        recurdive_search(cur_ed_set,cur_tx_tmp,cur_ed_tmp,MID+list(mid_ids),mid+1)
                     else:
                         return
             recurdive_search(pre_ed_set,pre_tx,pre_ed)
@@ -192,19 +186,20 @@ def binary_search(st_amts,ed_amts,batch,nodes,st_tx,st_ed,ed_tx,ed_st):
                 for MID,(pre_ed_set,pre_tx,pre_ed) in MIDS:
                     PASS,_ = income_expenditure_check_out(pre_tx,pre_ed,lst_tx,lst_st,lst_st,pre_ed_set)
                     if PASS:
-                        yield (int(nodes[0][0]),int(nodes[0][-1]),tuple(st_ids),*MID,tuple(ed_ids),AMOUNT,depth)                
-def fast_search(st_amts,ed_amts,batch,nodes,pre_tx,pre_ed,lst_tx,lst_st):
+                        t=tuple(st_ids)+tuple(MID)+tuple(ed_ids)
+                        yield (int(node[0][0]),int(node[0][-1]),-len(t)),(float(AMOUNT),depth,t)              
+def fast_search(st_amts,ed_amts,batch,node,pre_tx,pre_ed,lst_tx,lst_st):
     AMOUNT = sum(ed_amts)
     if abs(AMOUNT/sum(st_amts,1e-5)-1)<= SIGMA:
         st_ids = pre_tx[:,0]
         ed_ids = lst_tx[:,0]
         pre_ed_set = set(pre_ed)
-        depth = len(nodes[0])
-        MID = [0]*(depth-3)
+        depth = len(node[0])
+        MID = []
         for mid in range(1,depth-2):
             cur_tx,cur_id = np.unique(batch[:,mid,:],axis = 0,return_index = True)
             cur_tx = cur_tx.reshape(-1,4)
-            cur_st,cur_ed = nodes[cur_id,mid],nodes[cur_id,mid+1]
+            cur_st,cur_ed = node[cur_id,mid],node[cur_id,mid+1]
             cur_tx,cur_st,cur_ed = check_out(pre_tx,pre_ed,cur_tx,cur_st,cur_ed)
             amts = cur_tx[:,-1]
             if abs(amts.sum()/AMOUNT-1)<= SIGMA:
@@ -213,7 +208,7 @@ def fast_search(st_amts,ed_amts,batch,nodes,pre_tx,pre_ed,lst_tx,lst_st):
                 if PASS:
                     pre_ed_set = cur_ed_set
                     pre_tx,pre_ed = cur_tx,cur_ed
-                    MID[mid-1] = tuple(mid_ids)
+                    MID.extend(list(mid_ids))
                 else:
                     return None
             else:
@@ -221,80 +216,105 @@ def fast_search(st_amts,ed_amts,batch,nodes,pre_tx,pre_ed,lst_tx,lst_st):
         PASS,_ = income_expenditure_check_out(pre_tx,pre_ed,lst_tx,lst_st,lst_st,pre_ed_set)
         if not PASS:
             return None
-        return (int(nodes[0][0]),int(nodes[0][-1]),tuple(st_ids),*MID,tuple(ed_ids),AMOUNT,depth)
+        t=tuple(st_ids)+tuple(MID)+tuple(ed_ids)
+        yield (int(node[0][0]),int(node[0][-1]),-len(t)),(float(AMOUNT),depth,t)
     return None
 def search(iterator):
-    bucket = [i[1] for i in iterator]
-    length = len(bucket)
-    for i,(nds,egs) in enumerate(bucket):
-        st_nd,ed_nd,st_dt,ed_dt = nds[0],nds[-1],egs[0][1],egs[-1][1]
-        batch = [egs]
-        nodes = [nds]
-        j = i+1
-        while j<length:
-            nds_,egs_ = bucket[j]
-            st_nd_,ed_nd_,st_dt_,ed_dt_ = nds_[0],nds_[-1],egs_[0][1],egs_[-1][1]
-            if st_nd == st_nd_ and ed_nd == ed_nd_ and ed_dt_<= st_dt+T:
-                batch.append(egs_)
-                nodes.append(nds_)
-                j+= 1
-            else:
-                break
-        batch = np.array(batch)
-        nodes = np.array(nodes,int)
+    def find(batches,nodes):
+        batch = np.array(batches)
+        node = np.array(nodes,int)
         st_tx,st_id = np.unique(batch[:, 0,:],axis = 0,return_index = True)
-        st_ed = nodes[st_id,1]
+        st_ed = node[st_id,1]
         ed_tx,ed_id = np.unique(batch[:,-1,:],axis = 0,return_index = True)
-        ed_st = nodes[ed_id,-2]
+        ed_st = node[ed_id,-2]
         st_amts = st_tx[:,-1]
         ed_amts = ed_tx[:,-1]
         amts_len = len(st_amts)+len(ed_amts)
         if amts_len<= LIMIT :
-            for r in binary_search(st_amts,ed_amts,batch,nodes,st_tx,st_ed,ed_tx,ed_st):
+            for r in binary_search(st_amts,ed_amts,batch,node,st_tx,st_ed,ed_tx,ed_st):
                 yield r
         else:
-            r =  fast_search(st_amts,ed_amts,batch,nodes,st_tx,st_ed,ed_tx,ed_st)
+            r =  fast_search(st_amts,ed_amts,batch,node,st_tx,st_ed,ed_tx,ed_st)
             if r is not None:
                 yield r
             else:
-                batch = batch[:LIMIT,:,:]
-                nodes = nodes[:LIMIT,:]
-                st_tx,st_id = np.unique(batch[:, 0,:],axis = 0,return_index = True)
-                st_ed = nodes[st_id,1]
-                ed_tx,ed_id = np.unique(batch[:,-1,:],axis = 0,return_index = True)
-                ed_st = nodes[ed_id,-2]
-                st_amts = st_tx[:,-1]
-                ed_amts = ed_tx[:,-1]
-                for r in binary_search(st_amts,ed_amts,batch,nodes,st_tx,st_ed,ed_tx,ed_st):
-                    yield r
-srcs_rdd4 = srcs_rdd3.mapPartitions(search).distinct()
-srcs_rdd3_part = srcs_rdd2.repartitionAndSortWithinPartitions(P,partitionFunc = lambda x:portable_hash((x[0],x[1]))).mapPartitions(search).distinct()
-result = srcs_rdd4.collect()
-results3 = srcs_rdd3_part.collect()
-r = deque()
-RESULT = []
-r.extend(sorted(result,key = lambda x:-sum(map(len,x[2:-2]))))
-r.extend(sorted(results3,key = lambda x:-sum(map(len,x[2:-2]))))
-if r:
-    item = r.popleft()
-    union = lambda x,y:x|y
-    increase_id = 0
-    RESULT.append([increase_id,id2name[item[0]],id2name[item[1]],float(item[-2]),item[-1],reduce(union,map(set,item[2:-2]))])
-    while r:
-        item = r.popleft()
-        s = reduce(union,map(set,item[2:-2]))
-        not_sub = True
-        for S in RESULT:
-            if not (s-S[-1]):
-                not_sub = False
+                for j in range(len(batch)):
+                    mini_batch = batch[j:j+LIMIT,:,:]
+                    mini_node = node[j:j+LIMIT,:]
+                    st_tx,st_id = np.unique(mini_batch[:, 0,:],axis = 0,return_index = True)
+                    st_ed = mini_node[st_id,1]
+                    ed_tx,ed_id = np.unique(mini_batch[:,-1,:],axis = 0,return_index = True)
+                    ed_st = mini_node[ed_id,-2]
+                    st_amts = st_tx[:,-1]
+                    ed_amts = ed_tx[:,-1]
+                    for r in binary_search(st_amts,ed_amts,mini_batch,mini_node,st_tx,st_ed,ed_tx,ed_st):
+                        yield r
+    try:
+        batches=[]
+        (st_nd,ed_nd,st_dt,_),(nds,egs)= next(iterator)
+        batches.append(egs)
+        nodes = [nds]
+        while True:
+            (st_nd_,ed_nd_,st_dt_,ed_dt_),(nds,egs)= next(iterator)
+            if (st_nd_,ed_nd_)==(st_nd,ed_nd) and ed_dt_<st_dt+T:
+                batches.append(egs)
+                nodes.append(nds)
+            else:
+                for r in find(batches,nodes):
+                    yield r       
+                if (st_nd_,ed_nd_)!=(st_nd,ed_nd):
+                    st_nd,ed_nd,st_dt=st_nd_,ed_nd_,st_dt_
+                    batches = [egs_]
+                    nodes = [nds_]
+                else:
+                    while not batches and batches[0][1]+T<ed_dt_ :
+                        batches.pop(0)
+                        nodes.pop(0)
+                    batches.append(egs)
+                    nodes.append(nds)
+                    st_nd,ed_nd,st_dt=nodes[0][0],nodes[0][-1],batches[0][1]
+    except:
+        if batches:
+            for r in find(batches,nodes):
+                yield r
+def combine(iterator):
+    base={}
+    for item in iterator:
+        k,s=item[0][:2],set(item[1][-1])
+        if k not in base:
+            base={item[0][:2]:[set(item[1][-1])]}
+            yield item
+        else:
+            not_sub=True
+            for S in base[k]:
+                if len(s)>2*len(s-S):
+                    not_sub=False
+                    break
+            if not_sub:
+                base[k].append(s)
+                yield item
+srcs_rdd = sc.parallelize(srcs,min(P,len(srcs)))
+srcs_rdd2 = srcs_rdd.mapPartitions(prepares).persist()
+srcs_rdd4 = srcs_rdd2.mapPartitions(deep_search).repartitionAndSortWithinPartitions(P,partitionFunc=lambda x:portable_hash((x[0],x[1]))).mapPartitions(search).distinct().repartitionAndSortWithinPartitions(P,partitionFunc=lambda x:portable_hash((x[0],x[1]))).mapPartitions(combine).persist()
+base4 = [set(i) for i in srcs_rdd4.map(lambda x:x[1][-1]).collect()]
+def combine1(iterator):
+    for item in iterator:
+        s=set(item[1][-1])
+        not_sub=True
+        for S in base4:
+            if len(s)>2*len(s-S):
+                not_sub=False
                 break
         if not_sub:
-            increase_id+= 1
-            RESULT.append([increase_id,id2name[item[0]],id2name[item[1]],float(item[-2]),item[-1],s])
-RESULT_rdd = sc.parallelize(RESULT,P)
+            yield item
+srcs_rdd3 = srcs_rdd2.repartitionAndSortWithinPartitions(P,partitionFunc=lambda x:portable_hash((x[0],x[1]))).mapPartitions(search).distinct().repartitionAndSortWithinPartitions(P,partitionFunc=lambda x:portable_hash((x[0],x[1]))).mapPartitions(combine).mapPartitions(combine1)
+srcs_rdd2.unpersist()
+result=srcs_rdd4.union(srcs_rdd3).zipWithIndex()
+srcs_rdd4.unpersist()
 def flatValue(iterator):
-    for *i,s in iterator:
-        for payid in sorted(s):
-            yield i+[int(payid)]
-RESULT_rdd2 = RESULT_rdd.mapPartitions(flatValue).toDF('''batch_id: int, src: string, dst: string, amount_sum: float, depth: int, id: int''')
-RESULT_rdd2.join(df,'id','left').repartition(1).write.parquet("hdfs://localhost:9000/RESULT",mode = 'overwrite')
+    for (k,(*v,s)),idx in iterator:
+        for payid in s:
+            yield (idx,id2name[k[0]],id2name[k[1]],v[0],v[1],int(payid))
+RESULT = result.mapPartitions(flatValue).toDF('''batch_id: int, src: string, dst: string, amount_sum: float, depth: int, id: int''')
+RESULT.join(df,'id','left').repartition(1).write.parquet("hdfs://localhost:9000/RESULT",mode = 'overwrite')
+hc.read.parquet("hdfs://localhost:9000/RESULT").show()
