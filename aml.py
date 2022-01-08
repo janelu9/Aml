@@ -6,6 +6,7 @@
 from pyspark.sql import SparkSession,Window,functions as F
 from pyspark.conf import SparkConf
 from pyspark.rdd import portable_hash
+
 from scipy.sparse import csr_matrix
 import numpy as np
 
@@ -48,8 +49,11 @@ def build_index(df,max_depth,need3=True):
                 b = name2id[b]
                 if (a in nodes_set or a in srcs) and (b in nodes_set or b in dsts):
                     yield a,i[1],b,i[3],i[4],i[5]
-    data_values = df.withColumn('lag',F.coalesce(F.lag('daystamp',-1).over(Window.partitionBy('accname','Cntpty_Acct_Name').orderBy('daystamp')),F.lit(np.inf)))\
-    .select(['accname', 'Tx_Amt', 'Cntpty_Acct_Name', 'id', 'daystamp','lag']).rdd.mapPartitions(f).toDF().toPandas().values
+    data_values = df.withColumn('time_stamp',F.unix_timestamp('Event_Dt','yyyy-MM-dd'))\
+    .withColumn('lag',F.coalesce(F.lag('time_stamp',-1).over(Window.partitionBy('accname','Cntpty_Acct_Name').orderBy('time_stamp')),F.lit(np.inf)))\
+    .select(['accname', 'Tx_Amt', 'Cntpty_Acct_Name', 'id', 'time_stamp','lag'])\
+    .rdd.mapPartitions(f).toDF()\
+    .toPandas().values
     D = {}
     for a,m,b,k,t,l in data_values:
         if a not in D:
@@ -62,7 +66,7 @@ def build_index(df,max_depth,need3=True):
         for j in D[i]:
             D[i][j] = np.array(sorted(D[i][j],key = lambda x:x[1]),dtype = float)
     return D,srcs,{v:k for k,v in name2id.items()}
-T = 5;
+T = 5*86400;
 SIGMA = 0.05;
 max_depth = 4;
 P = 16;
