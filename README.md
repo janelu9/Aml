@@ -3,8 +3,6 @@
 Dedect relationship between A and E by tracing through payments with similar amounts and identifying payment chains.
 
 For example：
-
-`lag` means `lag(daystamp,-1) over (partitin by accname, Cntpty_Acct_Name order by daystamp )`
  
 |accname|  Event_Dt|Tx_Amt|Cntpty_Acct_Name|daystamp|  id|     lag| 
  | ------- | ---------- | ------ | ---------------- | -------- | ---- | -------- | 
@@ -17,6 +15,8 @@ For example：
 |      b|2020-01-03| 150.0|               d|    7307|5074|Infinity|
 |      c|2020-01-04|  50.0|               e|    7308|5075|Infinity|
 |      d|2020-01-04| 150.0|               e|    7308|5076|Infinity|
+
+`lag` means `lag(daystamp,-1) over (partitin by accname, Cntpty_Acct_Name order by daystamp )`
 
 You can run
 ` spark-submit  aml.py`
