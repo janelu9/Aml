@@ -4,19 +4,17 @@ Dedect relationship between A and E by tracing through payments with similar amo
 
 For example：
  
-|accname|  Event_Dt|Tx_Amt|Cntpty_Acct_Name|daystamp|  id|     lag| 
- | ------- | ---------- | ------ | ---------------- | -------- | ---- | -------- | 
-|      a|2020-01-01|  20.0|               b|    7305|5068|  7306.0|
-|      a|2020-01-02| 300.0|               b|    7306|5069|  7307.0|  
-|      a|2020-01-03| 180.0|               b|    7307|5070|Infinity| 
-|      b|2020-01-03|  40.0|               c|    7307|5071|  7307.0|
-|      b|2020-01-03| 500.0|               c|    7307|5072|  7308.0|  
-|      b|2020-01-04|  10.0|               c|    7308|5073|Infinity| 
-|      b|2020-01-03| 150.0|               d|    7307|5074|Infinity|
-|      c|2020-01-04|  50.0|               e|    7308|5075|Infinity|
-|      d|2020-01-04| 150.0|               e|    7308|5076|Infinity|
-
-`lag` means `lag(daystamp,-1) over (partitin by accname, Cntpty_Acct_Name order by daystamp )`
+|accname|  Event_Dt|Tx_Amt|Cntpty_Acct_Name|daystamp|  id|
+ | ------- | ---------- | ------ | ---------------- | -------- | ---- |
+|      a|2020-01-01|  20.0|               b|    7305|5068|
+|      a|2020-01-02| 300.0|               b|    7306|5069|
+|      a|2020-01-03| 180.0|               b|    7307|5070| 
+|      b|2020-01-03|  40.0|               c|    7307|5071|  
+|      b|2020-01-03| 500.0|               c|    7307|5072| 
+|      b|2020-01-04|  10.0|               c|    7308|5073|
+|      b|2020-01-03| 150.0|               d|    7307|5074|
+|      c|2020-01-04|  50.0|               e|    7308|5075|
+|      d|2020-01-04| 150.0|               e|    7308|5076|
 
 You can run
 ` spark-submit  aml.py`
