@@ -15,48 +15,58 @@ spark = SparkSession.builder.config(conf = conf).enableHiveSupport().getOrCreate
 sc = spark.sparkContext
 hc = HiveContext(sc)
 df = hc.read.parquet("hdfs://localhost:9000/data")
-uniq_edge = df.selectExpr('lower(trim(accname)) a','lower(trim(Cntpty_Acct_Name)) b ').filter('a<>b ').groupby(['a','b']).max()
-uniq_edge.persist()
-aconts = uniq_edge.selectExpr('a as n').groupby(['n']).max().union(uniq_edge.selectExpr('b as n').groupby(['n']).max()).groupby('n').max()
-x = aconts.toPandas().values
-name2id = {j[0]:i for i,j in enumerate(x)}
-uniq_edge_pd = uniq_edge.rdd.map(lambda x:(name2id[x[0]],name2id[x[1]])).toDF(['a','b']).toPandas()
-uniq_edge.unpersist()
-id2name = {v:k for k,v in name2id.items()}
-values = uniq_edge_pd.values
-name2id_len = len(name2id)
-s = csr_matrix(([1]*len(values), (values[:,0], values[:,1])), shape = (name2id_len, name2id_len))
-u = s.sum(axis = 1)
-v = s.sum(axis = 0)
-nodes_set = set(np.where(u>0)[0]) & set(np.where(v>0)[1])
-u = s*u
-srcs = np.where(u>0)[0]
-nodes_set.update(srcs)
-nodes_name_set = {id2name[i] for i in nodes_set}
-def f(iterator):
-    for i in iterator:
-        if i['accname'].strip().lower() in nodes_name_set:
-            yield i
-data_values = df.select(['accname', 'Tx_Amt', 'Cntpty_Acct_Name', 'id', 'daystamp','lag']).rdd.mapPartitions(f).toDF().toPandas().values
-D = {}
-for a,m,b,k,t,l in data_values:
-    a = name2id[a.strip().lower()]
-    b = name2id[b.strip().lower()]
-    if a!= b:
+def build_index(df,max_depth,need3=True):
+    uniq_edge = df.selectExpr('lower(trim(accname)) a','lower(trim(Cntpty_Acct_Name)) b ').filter('a<>b ').groupby(['a','b']).max().persist()
+    aconts = uniq_edge.selectExpr('a as n').groupby(['n']).max().union(uniq_edge.selectExpr('b as n').groupby(['n']).max()).groupby('n').max().toPandas().values
+    name2id = {j[0]:i for i,j in enumerate(aconts)}
+    values = uniq_edge.rdd.map(lambda x:(name2id[x[0]],name2id[x[1]])).toDF(['a','b']).toPandas().values
+    uniq_edge.unpersist()
+    name2id_len = len(name2id)
+    s = csr_matrix(([1]*len(values), (values[:,0], values[:,1])), shape = (name2id_len, name2id_len))
+    u = s.sum(axis = 1)
+    v = s.sum(axis = 0)
+    ins =[set(np.where(v>0)[1])]
+    outs=[set(np.where(u>0)[0])]
+    depth=3 if need3 else max_depth
+    for i in range(1,depth-1):
+        u = s*u
+        v = v*s
+        ins.append(set(np.where(v>0)[1]))
+        outs.append(set(np.where(u>0)[0]))   
+    srcs = outs[-1]
+    dsts = ins[-1]
+    if not srcs:return {},set(),{}
+    nodes_set=set()
+    for i in range(depth-2):
+        nodes_set.update(outs[i]&ins[depth-3-i])
+    def f(iterator):
+        for i in iterator:
+            a,b=i['accname'].strip().lower(),i['Cntpty_Acct_Name'].strip().lower()
+            if a!=b:
+                a = name2id[a.strip().lower()]
+                b = name2id[b.strip().lower()]
+                if (a in nodes_set or a in srcs) and (b in nodes_set or b in dsts):
+                    yield a,i[1],b,i[3],i[4],i[5]
+    data_values = df.select(['accname', 'Tx_Amt', 'Cntpty_Acct_Name', 'id', 'daystamp','lag']).rdd.mapPartitions(f).toDF().toPandas().values
+    D = {}
+    for a,m,b,k,t,l in data_values:
         if a not in D:
             D[a] = {b:[[k,t,l,m]]}
         elif b not in D[a]:
             D[a][b] = [[k,t,l,m]]
         else:
             D[a][b].append([k,t,l,m])
-for i in D:
-    for j in D[i]:
-        D[i][j] = np.array(sorted(D[i][j],key = lambda x:x[1]),dtype = float)
+    for i in D:
+        for j in D[i]:
+            D[i][j] = np.array(sorted(D[i][j],key = lambda x:x[1]),dtype = float)
+    return D,srcs,{v:k for k,v in name2id.items()}
 T = 5;
 SIGMA = 0.05;
-max_depth = 4;
+max_depth = 5;
 P = 16;
 LIMIT = 20
+need3=False
+D,srcs,id2name=build_index(df,max_depth,need3)
 def prepares(srcs):
     for a in srcs:
         for b in D[a]:
@@ -293,7 +303,7 @@ def combine(iterator):
             if not_sub:
                 base[k].append(s)
                 yield item
-srcs_rdd = sc.parallelize(srcs,min(P,len(srcs)))
+srcs_rdd = sc.parallelize(srcs,min(P,max(len(srcs),1)))
 srcs_rdd2 = srcs_rdd.mapPartitions(prepares).persist()
 srcs_rdd4 = srcs_rdd2.mapPartitions(deep_search).repartitionAndSortWithinPartitions(P,partitionFunc=lambda x:portable_hash((x[0],x[1]))).mapPartitions(search).distinct().repartitionAndSortWithinPartitions(P,partitionFunc=lambda x:portable_hash((x[0],x[1]))).mapPartitions(combine).persist()
 base4 = [set(i) for i in srcs_rdd4.map(lambda x:x[1][-1]).collect()]
@@ -309,7 +319,7 @@ def combine1(iterator):
             yield item
 srcs_rdd3 = srcs_rdd2.repartitionAndSortWithinPartitions(P,partitionFunc=lambda x:portable_hash((x[0],x[1]))).mapPartitions(search).distinct().repartitionAndSortWithinPartitions(P,partitionFunc=lambda x:portable_hash((x[0],x[1]))).mapPartitions(combine).mapPartitions(combine1)
 srcs_rdd2.unpersist()
-result=srcs_rdd4.union(srcs_rdd3).zipWithIndex()
+result=srcs_rdd4.union(srcs_rdd3).zipWithIndex() if need3 else srcs_rdd4.zipWithIndex()
 srcs_rdd4.unpersist()
 def flatValue(iterator):
     for (k,(*v,s)),idx in iterator:
