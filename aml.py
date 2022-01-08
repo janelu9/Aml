@@ -336,5 +336,5 @@ def flatID(iterator):
     for (k,(*v,s)),idx in iterator:
         for payid in s:
             yield (idx,id2name[k[0]],id2name[k[1]],v[0],v[1],int(payid))
-RESULT = result.mapPartitions(flatID).toDF('''batch_id: int, src: string, dst: string, amount_sum: float, depth: int, id: int''')
+RESULT = result.mapPartitions(flatID).toDF('''batch_id: int, src: string, dst: string, amount: float, depth: int, id: int''')
 RESULT.join(df,'id','left').repartition(1).write.parquet("hdfs://localhost:9000/RESULT",mode = 'overwrite')
