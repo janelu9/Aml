@@ -24,7 +24,7 @@ to get the payment chains seem like money laundering. The same 'batch_id' indica
 
 ![image](https://user-images.githubusercontent.com/24219258/148644725-afb26de1-160e-4589-a035-3046a632b098.png)
 
- |id|batch_id|src|dst|amount_sum|depth|accname|  Event_Dt|Tx_Amt|Cntpty_Acct_Name|
+ |id|batch_id|src|dst|amount|depth|accname|  Event_Dt|Tx_Amt|Cntpty_Acct_Name|
  | ---- | -------- | --- | --- | ---- | ----- | ------ | ----- | ----- | ---- |
 |5068|       0|  a|  e|     200.0|     4|      a|2020-01-01|  20.0|               b|
 |5070|       0|  a|  e|     200.0|     4|      a|2020-01-03| 180.0|               b|
