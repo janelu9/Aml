@@ -35,16 +35,18 @@ def build_index(df,max_depth,need3=True):
         outs.append(set(np.where(u>0)[0]))   
     srcs = outs[-1]
     dsts = ins[-1]
-    if not srcs:return {},set(),{}
+    if not srcs:
+        return {},set(),{}
     nodes_set=set()
     for i in range(depth-2):
         nodes_set.update(outs[i]&ins[depth-3-i])
     def f(iterator):
         for i in iterator:
-            a,b=i['accname'].strip().lower(),i['Cntpty_Acct_Name'].strip().lower()
+            a=i['accname'].strip().lower()
+            b=i['Cntpty_Acct_Name'].strip().lower()
             if a!=b:
-                a = name2id[a.strip().lower()]
-                b = name2id[b.strip().lower()]
+                a = name2id[a]
+                b = name2id[b]
                 if (a in nodes_set or a in srcs) and (b in nodes_set or b in dsts):
                     yield a,i[1],b,i[3],i[4],i[5]
     data_values = df.select(['accname', 'Tx_Amt', 'Cntpty_Acct_Name', 'id', 'daystamp','lag']).rdd.mapPartitions(f).toDF().toPandas().values
@@ -60,12 +62,7 @@ def build_index(df,max_depth,need3=True):
         for j in D[i]:
             D[i][j] = np.array(sorted(D[i][j],key = lambda x:x[1]),dtype = float)
     return D,srcs,{v:k for k,v in name2id.items()}
-T = 5;
-SIGMA = 0.05;
-max_depth = 5;
-P = 16;
-LIMIT = 20
-need3=False
+T = 5;SIGMA = 0.05;max_depth = 4;P = 16;LIMIT = 20;need3=False
 D,srcs,id2name=build_index(df,max_depth,need3)
 def prepares(srcs):
     for a in srcs:
@@ -306,21 +303,24 @@ def combine(iterator):
 srcs_rdd = sc.parallelize(srcs,min(P,max(len(srcs),1)))
 srcs_rdd2 = srcs_rdd.mapPartitions(prepares).persist()
 srcs_rdd4 = srcs_rdd2.mapPartitions(deep_search).repartitionAndSortWithinPartitions(P,partitionFunc=lambda x:portable_hash((x[0],x[1]))).mapPartitions(search).distinct().repartitionAndSortWithinPartitions(P,partitionFunc=lambda x:portable_hash((x[0],x[1]))).mapPartitions(combine).persist()
-base4 = [set(i) for i in srcs_rdd4.map(lambda x:x[1][-1]).collect()]
-def combine1(iterator):
-    for item in iterator:
-        s=set(item[1][-1])
-        not_sub=True
-        for S in base4:
-            if len(s)>2*len(s-S):
-                not_sub=False
-                break
-        if not_sub:
-            yield item
-srcs_rdd3 = srcs_rdd2.repartitionAndSortWithinPartitions(P,partitionFunc=lambda x:portable_hash((x[0],x[1]))).mapPartitions(search).distinct().repartitionAndSortWithinPartitions(P,partitionFunc=lambda x:portable_hash((x[0],x[1]))).mapPartitions(combine).mapPartitions(combine1)
-srcs_rdd2.unpersist()
-result=srcs_rdd4.union(srcs_rdd3).zipWithIndex() if need3 else srcs_rdd4.zipWithIndex()
-srcs_rdd4.unpersist()
+if need3 :
+    base4 = [set(i) for i in srcs_rdd4.map(lambda x:x[1][-1]).collect()]
+    def combine1(iterator):
+        for item in iterator:
+            s=set(item[1][-1])
+            not_sub=True
+            for S in base4:
+                if len(s)>2*len(s-S):
+                    not_sub=False
+                    break
+            if not_sub:
+                yield item
+    srcs_rdd3 = srcs_rdd2.repartitionAndSortWithinPartitions(P,partitionFunc=lambda x:portable_hash((x[0],x[1]))).mapPartitions(search).distinct().repartitionAndSortWithinPartitions(P,partitionFunc=lambda x:portable_hash((x[0],x[1]))).mapPartitions(combine).mapPartitions(combine1)
+    srcs_rdd2.unpersist()
+    result=srcs_rdd4.union(srcs_rdd3).zipWithIndex()
+    srcs_rdd4.unpersist()
+else:
+    result=srcs_rdd4.zipWithIndex()
 def flatValue(iterator):
     for (k,(*v,s)),idx in iterator:
         for payid in s:
