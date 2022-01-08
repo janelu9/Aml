@@ -3,7 +3,7 @@
 #Created on Thu Nov 9 10:38:29 2021
 #@author: Lu Jian
 
-from pyspark.sql import HiveContext,SparkSession
+from pyspark.sql import SparkSession
 from pyspark.conf import SparkConf
 from pyspark.rdd import portable_hash
 from scipy.sparse import csr_matrix
@@ -13,8 +13,7 @@ conf = SparkConf()
 conf.set("spark.hadoop.mapred.output.compress", "false")
 spark = SparkSession.builder.config(conf = conf).enableHiveSupport().getOrCreate()
 sc = spark.sparkContext
-hc = HiveContext(sc)
-df = hc.read.parquet("hdfs://localhost:9000/data")
+df = spark.read.parquet("hdfs://localhost:9000/data")
 def build_index(df,max_depth,need3=True):
     uniq_edge = df.selectExpr('lower(trim(accname)) a','lower(trim(Cntpty_Acct_Name)) b ').filter('a<>b ').groupby(['a','b']).max().persist()
     aconts = uniq_edge.selectExpr('a as n').groupby(['n']).max().union(uniq_edge.selectExpr('b as n').groupby(['n']).max()).groupby('n').max().toPandas().values
@@ -62,7 +61,7 @@ def build_index(df,max_depth,need3=True):
         for j in D[i]:
             D[i][j] = np.array(sorted(D[i][j],key = lambda x:x[1]),dtype = float)
     return D,srcs,{v:k for k,v in name2id.items()}
-T = 5;SIGMA = 0.05;max_depth = 4;P = 16;LIMIT = 20;need3=False
+T = 5;SIGMA = 0.05;max_depth = 4;P = 16;LIMIT = 20;need3=True
 D,srcs,id2name=build_index(df,max_depth,need3)
 def prepares(srcs):
     for a in srcs:
@@ -274,7 +273,7 @@ def search(iterator):
                     batches = [egs_]
                     nodes = [nds_]
                 else:
-                    while not batches and batches[0][1]+T<ed_dt_ :
+                    while batches and batches[0][1]+T<ed_dt_ :
                         batches.pop(0)
                         nodes.pop(0)
                     batches.append(egs)
@@ -327,4 +326,4 @@ def flatValue(iterator):
             yield (idx,id2name[k[0]],id2name[k[1]],v[0],v[1],int(payid))
 RESULT = result.mapPartitions(flatValue).toDF('''batch_id: int, src: string, dst: string, amount_sum: float, depth: int, id: int''')
 RESULT.join(df,'id','left').repartition(1).write.parquet("hdfs://localhost:9000/RESULT",mode = 'overwrite')
-hc.read.parquet("hdfs://localhost:9000/RESULT").show()
+spark.read.parquet("hdfs://localhost:9000/RESULT").show()
