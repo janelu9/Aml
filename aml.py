@@ -61,7 +61,12 @@ def build_index(df,max_depth,need3=True):
         for j in D[i]:
             D[i][j] = np.array(sorted(D[i][j],key = lambda x:x[1]),dtype = float)
     return D,srcs,{v:k for k,v in name2id.items()}
-T = 5;SIGMA = 0.05;max_depth = 4;P = 16;LIMIT = 20;need3=True
+T = 5;
+SIGMA = 0.05;
+max_depth = 4;
+P = 16;
+LIMIT = 20;
+need3=False
 D,srcs,id2name=build_index(df,max_depth,need3)
 def prepares(srcs):
     for a in srcs:
@@ -97,7 +102,7 @@ def deep_search(iterator):
                                 q.extend([[n+[n1],e+[e_Ai]] for e_Ai in e_A])
             else:
                 yield [(n[0],n[-1],e[0][1],e[-1][1]),(n,e)]
-def check_out(pre_tx,pre_ed,cur_tx,cur_st,cur_ed):
+def mask(pre_tx,pre_ed,cur_tx,cur_st,cur_ed):
     for idx,st in enumerate(cur_st):
         pre_get = pre_tx[pre_ed == st,:]
         pre_get = pre_get[cur_tx[idx,1]>= pre_get[:,1]]
@@ -123,21 +128,21 @@ def binary_search(st_amts,ed_amts,batch,node,st_tx,st_ed,ed_tx,ed_st):
     upbound = min(sum(st_amts),sum(ed_amts))*(1+SIGMA)   
     select = []
     sum_list = []
-    def sovler(bool_list = [], n = 0):
-        st = sum([amts[i] for i in bool_list if  i< pivot])   
-        ed = sum([amts[i] for i in bool_list if  i>= pivot],1e-5)
+    def sovler1(index_list = [], n = 0):
+        st = sum([amts[i] for i in index_list if  i< pivot])   
+        ed = sum([amts[i] for i in index_list if  i>= pivot],1e-5)
         if max(st,ed)>upbound:
             return
         des = st/ed    
         if abs(des-1)<= SIGMA:
-            select.append(bool_list)
+            select.append(index_list)
             sum_list.append(st)
             return
         if n ==  len(amts) :
             return
-        sovler(bool_list+[n], n+1)
-        sovler(bool_list, n+1)
-    sovler()
+        sovler1(index_list+[n], n+1)
+        sovler1(index_list, n+1)
+    sovler1()
     if select:
         for sel_idx,AMOUNT in zip(select,sum_list):
             select_index = np.array(sel_idx)
@@ -158,23 +163,23 @@ def binary_search(st_amts,ed_amts,batch,node,st_tx,st_ed,ed_tx,ed_st):
                     return                     
                 cur_tx,cur_id = np.unique(batch[:,mid,:],axis = 0,return_index = True)
                 cur_st,cur_ed = node[cur_id,mid],node[cur_id,mid+1]
-                cur_tx,cur_st,cur_ed = check_out(pre_tx,pre_ed,cur_tx,cur_st,cur_ed)
+                cur_tx,cur_st,cur_ed = mask(pre_tx,pre_ed,cur_tx,cur_st,cur_ed)
                 amts = cur_tx[:,-1]
                 if amts.sum()<(1-SIGMA)*AMOUNT:
                     return 
                 mid_indexs = []
-                def sovler1(bool_list = [],n = 0,asum = 0):
+                def sovler2(index_list = [],n = 0,asum = 0):
                     des = asum/AMOUNT-1
                     if des>SIGMA:
                         return
                     if abs(des)<= SIGMA:
-                        mid_indexs.append(bool_list)
+                        mid_indexs.append(index_list)
                         return
                     if n ==  len(amts) :
                         return
-                    sovler1(bool_list+[n],n+1,asum+amts[n])
-                    sovler1(bool_list,n+1,asum)
-                sovler1()
+                    sovler2(index_list+[n],n+1,asum+amts[n])
+                    sovler2(index_list,n+1,asum)
+                sovler2()
                 if not mid_indexs:
                     return
                 for mid_index in mid_indexs:
@@ -206,7 +211,7 @@ def fast_search(st_amts,ed_amts,batch,node,pre_tx,pre_ed,lst_tx,lst_st):
             cur_tx,cur_id = np.unique(batch[:,mid,:],axis = 0,return_index = True)
             cur_tx = cur_tx.reshape(-1,4)
             cur_st,cur_ed = node[cur_id,mid],node[cur_id,mid+1]
-            cur_tx,cur_st,cur_ed = check_out(pre_tx,pre_ed,cur_tx,cur_st,cur_ed)
+            cur_tx,cur_st,cur_ed = mask(pre_tx,pre_ed,cur_tx,cur_st,cur_ed)
             amts = cur_tx[:,-1]
             if abs(amts.sum()/AMOUNT-1)<= SIGMA:
                 mid_ids = cur_tx[:,0]
@@ -225,8 +230,8 @@ def fast_search(st_amts,ed_amts,batch,node,pre_tx,pre_ed,lst_tx,lst_st):
         t=tuple(st_ids)+tuple(MID)+tuple(ed_ids)
         yield (int(node[0][0]),int(node[0][-1]),-len(t)),(float(AMOUNT),depth,t)
     return None
-def search(iterator):
-    def find(batches,nodes):
+def main(iterator):
+    def search(batches,nodes):
         batch = np.array(batches)
         node = np.array(nodes,int)
         st_tx,st_id = np.unique(batch[:, 0,:],axis = 0,return_index = True)
@@ -266,7 +271,7 @@ def search(iterator):
                 batches.append(egs)
                 nodes.append(nds)
             else:
-                for r in find(batches,nodes):
+                for r in search(batches,nodes):
                     yield r       
                 if (st_nd_,ed_nd_)!=(st_nd,ed_nd):
                     st_nd,ed_nd,st_dt=st_nd_,ed_nd_,st_dt_
@@ -281,7 +286,7 @@ def search(iterator):
                     st_nd,ed_nd,st_dt=nodes[0][0],nodes[0][-1],batches[0][1]
     except:
         if batches:
-            for r in find(batches,nodes):
+            for r in search(batches,nodes):
                 yield r
 def combine(iterator):
     base={}
@@ -301,10 +306,14 @@ def combine(iterator):
                 yield item
 srcs_rdd = sc.parallelize(srcs,min(P,max(len(srcs),1)))
 srcs_rdd2 = srcs_rdd.mapPartitions(prepares).persist()
-srcs_rdd4 = srcs_rdd2.mapPartitions(deep_search).repartitionAndSortWithinPartitions(P,partitionFunc=lambda x:portable_hash((x[0],x[1]))).mapPartitions(search).distinct().repartitionAndSortWithinPartitions(P,partitionFunc=lambda x:portable_hash((x[0],x[1]))).mapPartitions(combine).persist()
+srcs_rdd4 = srcs_rdd2.mapPartitions(deep_search)\
+.repartitionAndSortWithinPartitions(P,partitionFunc=lambda x:portable_hash((x[0],x[1])))\
+.mapPartitions(main).distinct()\
+.repartitionAndSortWithinPartitions(P,partitionFunc=lambda x:portable_hash((x[0],x[1])))\
+.mapPartitions(combine).persist()
 if need3 :
     base4 = [set(i) for i in srcs_rdd4.map(lambda x:x[1][-1]).collect()]
-    def combine1(iterator):
+    def combine3(iterator):
         for item in iterator:
             s=set(item[1][-1])
             not_sub=True
@@ -314,16 +323,18 @@ if need3 :
                     break
             if not_sub:
                 yield item
-    srcs_rdd3 = srcs_rdd2.repartitionAndSortWithinPartitions(P,partitionFunc=lambda x:portable_hash((x[0],x[1]))).mapPartitions(search).distinct().repartitionAndSortWithinPartitions(P,partitionFunc=lambda x:portable_hash((x[0],x[1]))).mapPartitions(combine).mapPartitions(combine1)
+    srcs_rdd3 = srcs_rdd2.repartitionAndSortWithinPartitions(P,partitionFunc=lambda x:portable_hash((x[0],x[1])))\
+    .mapPartitions(main).distinct()\
+    .repartitionAndSortWithinPartitions(P,partitionFunc=lambda x:portable_hash((x[0],x[1])))\
+    .mapPartitions(combine).mapPartitions(combine3)
     srcs_rdd2.unpersist()
     result=srcs_rdd4.union(srcs_rdd3).zipWithIndex()
     srcs_rdd4.unpersist()
 else:
     result=srcs_rdd4.zipWithIndex()
-def flatValue(iterator):
+def flatID(iterator):
     for (k,(*v,s)),idx in iterator:
         for payid in s:
             yield (idx,id2name[k[0]],id2name[k[1]],v[0],v[1],int(payid))
-RESULT = result.mapPartitions(flatValue).toDF('''batch_id: int, src: string, dst: string, amount_sum: float, depth: int, id: int''')
+RESULT = result.mapPartitions(flatID).toDF('''batch_id: int, src: string, dst: string, amount_sum: float, depth: int, id: int''')
 RESULT.join(df,'id','left').repartition(1).write.parquet("hdfs://localhost:9000/RESULT",mode = 'overwrite')
-spark.read.parquet("hdfs://localhost:9000/RESULT").show()
