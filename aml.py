@@ -6,7 +6,6 @@
 from pyspark.sql import SparkSession,Window,functions as F
 from pyspark.conf import SparkConf
 from pyspark.rdd import portable_hash
-
 from scipy.sparse import csr_matrix
 import numpy as np
 
@@ -50,9 +49,7 @@ def build_index(df,max_depth,need3=True):
                 if (a in nodes_set or a in srcs) and (b in nodes_set or b in dsts):
                     yield a,i[1],b,i[3],i[4],i[5]
     data_values = df.withColumn('lag',F.coalesce(F.lag('daystamp',-1).over(Window.partitionBy('accname','Cntpty_Acct_Name').orderBy('daystamp')),F.lit(np.inf)))\
-    .select(['accname', 'Tx_Amt', 'Cntpty_Acct_Name', 'id', 'daystamp','lag'])\
-    .rdd.mapPartitions(f).toDF()\
-    .toPandas().values
+    .select(['accname', 'Tx_Amt', 'Cntpty_Acct_Name', 'id', 'daystamp','lag']).rdd.mapPartitions(f).toDF().toPandas().values
     D = {}
     for a,m,b,k,t,l in data_values:
         if a not in D:
