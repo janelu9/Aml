@@ -48,7 +48,7 @@ def build_index(df,max_depth,need3=True):
                 b = name2id[b]
                 if (a in nodes_set or a in srcs) and (b in nodes_set or b in dsts):
                     yield a,i[1],b,i[3],i[4],i[5]
-    data_values = df.withColumn('time_stamp',F.unix_timestamp('Event_Dt','yyyy-MM-dd'))\
+    data_values = df.withColumn('time_stamp',F.unix_timestamp('Event_Dt','yyyy-MM-dd')+F.col('id')/1e28)\
     .withColumn('lag',F.coalesce(F.lag('time_stamp',-1).over(Window.partitionBy('accname','Cntpty_Acct_Name').orderBy('time_stamp')),F.lit(np.inf)))\
     .select(['accname', 'Tx_Amt', 'Cntpty_Acct_Name', 'id', 'time_stamp','lag'])\
     .rdd.mapPartitions(f).toDF()\
