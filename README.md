@@ -1,6 +1,6 @@
 # Anti-money laundering
 
-Dedect relationship between A and E by tracing through payments with similar amounts and identifying payment chains.
+Dedect relationship between 'a' and 'e' by tracing through payments with similar amounts and identifying payment chains from the transaction data.
 
 For example：
  
