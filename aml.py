@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 #Created on Thu Nov 9 10:38:29 2021
-#@author: Lu Jian Email:janelu@live.cn; lujian@sdc.icbc.com.cn 
+#@author: Lu Jian; email:janelu@live.cn; lujian@sdc.icbc.com.cn 
 
 from pyspark.sql import SparkSession,Window,functions as F
 from pyspark.conf import SparkConf
@@ -161,7 +161,7 @@ def binary_search(st_amts,ed_amts,batch,node,st_tx,st_ed,ed_tx,ed_st):
             pre_ed_set = set(pre_ed)
             depth = len(node[0])
             MIDS = []
-            def recurdive_search(pre_ed_set,pre_tx,pre_ed,MID = [],mid = 1):
+            def recursive_search(pre_ed_set,pre_tx,pre_ed,MID = [],mid = 1):
                 if mid > depth-3:
                     MIDS.append([MID,(pre_ed_set,pre_tx,pre_ed)])
                     return                     
@@ -193,10 +193,10 @@ def binary_search(st_amts,ed_amts,batch,node,st_tx,st_ed,ed_tx,ed_st):
                     cur_ed_tmp = cur_ed[mid_index]
                     PASS,cur_ed_set = income_expenditure_check_out(pre_tx,pre_ed,cur_tx_tmp,cur_st_tmp,cur_ed_tmp,pre_ed_set)
                     if PASS:
-                        recurdive_search(cur_ed_set,cur_tx_tmp,cur_ed_tmp,MID+list(mid_ids),mid+1)
+                        recursive_search(cur_ed_set,cur_tx_tmp,cur_ed_tmp,MID+list(mid_ids),mid+1)
                     else:
                         return
-            recurdive_search(pre_ed_set,pre_tx,pre_ed)
+            recursive_search(pre_ed_set,pre_tx,pre_ed)
             if MIDS:
                 for MID,(pre_ed_set,pre_tx,pre_ed) in MIDS:
                     PASS,_ = income_expenditure_check_out(pre_tx,pre_ed,lst_tx,lst_st,lst_st,pre_ed_set)
