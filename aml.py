@@ -6,6 +6,7 @@
 from pyspark.sql import SparkSession,Window,functions as F
 from pyspark.conf import SparkConf
 from pyspark.rdd import portable_hash
+
 conf = SparkConf()
 conf.set("spark.hadoop.mapred.output.compress", "false")
 spark = SparkSession.builder.config(conf = conf).enableHiveSupport().getOrCreate()
@@ -13,11 +14,11 @@ sc = spark.sparkContext
 
 from pygraph import jian_iteration,binary_search
 import numpy as np
-from numba import jit
 
 df = spark.read.parquet("hdfs://localhost:9000/data")
+pay_id,acc_name,event_dt,tx_amt,cntpty_acc_name='id','accname','Event_Dt','Tx_Amt','Cntpty_Acct_Name'
 def build_index(df,max_depth,need3=True):
-    uniq_edge = df.selectExpr('lower(trim(accname)) a','lower(trim(Cntpty_Acct_Name)) b ').filter('a<>b ').groupby(['a','b']).max().persist()
+    uniq_edge = df.selectExpr(f'lower(trim({acc_name})) a',f'lower(trim({cntpty_acc_name})) b ').filter('a<>b ').groupby(['a','b']).max().persist()
     aconts = uniq_edge.selectExpr('a as n').groupby(['n']).max().union(uniq_edge.selectExpr('b as n').groupby(['n']).max()).groupby('n').max().toPandas().values
     name2id = {j[0]:i for i,j in enumerate(aconts)}
     values = uniq_edge.rdd.map(lambda x:(name2id[x[0]],name2id[x[1]])).toDF(['a','b']).toPandas().values
@@ -28,20 +29,20 @@ def build_index(df,max_depth,need3=True):
         return {},set(),{}
     def f(iterator):
         for i in iterator:
-            a=i['accname'].strip().lower()
-            b=i['Cntpty_Acct_Name'].strip().lower()
+            a=i[acc_name].strip().lower()
+            b=i[cntpty_acc_name].strip().lower()
             if a!=b:
                 a = name2id[a]
                 b = name2id[b]
                 if (a in nodes_set or a in srcs) and (b in nodes_set or b in dsts):
-                    yield a,i[1],b,i[3],i[4],i[5]
-    data_values = df.withColumn('time_stamp',F.unix_timestamp('Event_Dt','yyyy-MM-dd')+F.col('id')/1e28)\
-    .withColumn('lag',F.coalesce(F.lag('time_stamp',-1).over(Window.partitionBy('accname','Cntpty_Acct_Name').orderBy('time_stamp')),F.lit(np.inf)))\
-    .select(['accname', 'Tx_Amt', 'Cntpty_Acct_Name', 'id', 'time_stamp','lag'])\
+                    yield i[pay_id],a,i[tx_amt],b,i['time_stamp'],i['lag']
+    data_values = df.withColumn('time_stamp',F.unix_timestamp(event_dt,'yyyy-MM-dd')+F.col(pay_id)/1e28)\
+    .withColumn('lag',F.coalesce(F.lag('time_stamp',-1).over(Window.partitionBy(acc_name,cntpty_acc_name).orderBy('time_stamp')),F.lit(np.inf)))\
+    .select([pay_id,acc_name,tx_amt,cntpty_acc_name,'time_stamp','lag'])\
     .rdd.mapPartitions(f).toDF()\
     .toPandas().values
     D = {}
-    for a,m,b,k,t,l in data_values:
+    for k,a,m,b,t,l in data_values:
         if a not in D:
             D[a] = {b:[[k,t,l,m]]}
         elif b not in D[a]:
@@ -145,7 +146,6 @@ def fast_search(st_amts,ed_amts,batch,node,pre_tx,pre_ed,lst_tx,lst_st,SIGMA):
         yield (int(node[0][0]),int(node[0][-1]),-len(t)),(float(AMOUNT),depth,t)
     return None
 def main(iterator):
-    @jit
     def search(batches,nodes,SIGMA,LIMIT):
         batch = np.array(batches)
         node = np.array(nodes,int)
@@ -251,6 +251,6 @@ def flatID(iterator):
     for (k,(*v,s)),idx in iterator:
         for payid in s:
             yield (idx,id2name[k[0]],id2name[k[1]],v[0],v[1],int(payid))
-RESULT = result.mapPartitions(flatID).toDF('''batch_id: int, src: string, dst: string, amount: float, depth: int, id: int''')
-RESULT.join(df,'id','left').repartition(1).write.parquet("hdfs://localhost:9000/RESULT",mode = 'overwrite')
+RESULT = result.mapPartitions(flatID).toDF(f'''batch_id: int, src: string, dst: string, amount: float, depth: int, {pay_id}: int''')
+RESULT.join(df,pay_id,'left').repartition(1).write.parquet("hdfs://localhost:9000/RESULT",mode = 'overwrite')
 spark.read.parquet("hdfs://localhost:9000/RESULT").show()
