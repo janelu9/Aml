@@ -29,13 +29,13 @@ def build_index(df,max_depth,need3=True):
         return {},set(),{}
     def f(iterator):
         for i in iterator:
-            a=i[acc_name].strip().lower()
-            b=i[cntpty_acc_name].strip().lower()
-            if a!=b:
-                a = name2id[a]
-                b = name2id[b]
-                if (a in nodes_set or a in srcs) and (b in nodes_set or b in dsts):
-                    yield i[pay_id],a,i[tx_amt],b,i['time_stamp'],i['lag']
+            if i[acc_name] is not None and i[cntpty_acc_name] is not None:
+                a,b=i[acc_name].strip().lower(),i[cntpty_acc_name].strip().lower()
+                if a!=b:
+                    a = name2id[a]
+                    b = name2id[b]
+                    if (a in nodes_set or a in srcs) and (b in nodes_set or b in dsts):
+                        yield i[pay_id],a,i[tx_amt],b,i['time_stamp'],i['lag']
     data_values = df.withColumn('time_stamp',F.unix_timestamp(event_dt,'yyyy-MM-dd')+F.col(pay_id)/1e28)\
     .withColumn('lag',F.coalesce(F.lag('time_stamp',-1).over(Window.partitionBy(acc_name,cntpty_acc_name).orderBy('time_stamp')),F.lit(np.inf)))\
     .select([pay_id,acc_name,tx_amt,cntpty_acc_name,'time_stamp','lag'])\
