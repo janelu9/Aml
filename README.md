@@ -17,7 +17,7 @@ For example：
 |5076|      d|2020-01-04| 150.0|            e|
 
 You can run
-`spark-submit  --files jian_iteration.pyd  aml.py` under Windows or `spark-submit  --files jian_iteration.so  aml.py` under Linux to get the payment chains seem like money laundering. Same 'batch_id' indicates these transactions belong to a complete chain. Field 'depth' indicates the length of the chain. 
+`spark-submit  --files jian_iteration.pyd  aml.py` under Windows or `spark-submit  --files jian_iteration.so  aml.py` in Linux platform to get the payment chains seem like money laundering. Same 'batch_id' indicates these transactions belong to a complete chain. Field 'depth' indicates the length of the chain. 
 
 ![image](https://user-images.githubusercontent.com/24219258/148644725-afb26de1-160e-4589-a035-3046a632b098.png)
 
