@@ -1,12 +1,12 @@
 #!/usr/bin/env python
 # coding: utf-8
 #Created on Thu Nov 9 10:38:29 2021
-#@author: Lu Jian; email:janelu@live.cn, lujian@sdc.icbc.com.cn 
+#@author: Lu Jian Email:janelu@live.cn; lujian@sdc.icbc.com.cn 
 
 from pyspark.sql import SparkSession,Window,functions as F
 from pyspark.conf import SparkConf
 from pyspark.rdd import portable_hash
-from scipy.sparse import csr_matrix
+from jian_iteration import jian_iteration
 import numpy as np
 
 conf = SparkConf()
@@ -20,25 +20,10 @@ def build_index(df,max_depth,need3=True):
     name2id = {j[0]:i for i,j in enumerate(aconts)}
     values = uniq_edge.rdd.map(lambda x:(name2id[x[0]],name2id[x[1]])).toDF(['a','b']).toPandas().values
     uniq_edge.unpersist()
-    name2id_len = len(name2id)
-    s = csr_matrix(([1]*len(values), (values[:,0], values[:,1])), shape = (name2id_len, name2id_len))
-    u = s.sum(axis = 1)
-    v = s.sum(axis = 0)
-    ins =[set(np.where(v>0)[1])]
-    outs=[set(np.where(u>0)[0])]
     depth=3 if need3 else max_depth
-    for i in range(1,depth-1):
-        u = s*u
-        v = v*s
-        ins.append(set(np.where(v>0)[1]))
-        outs.append(set(np.where(u>0)[0]))   
-    srcs = outs[-1]
-    dsts = ins[-1]
+    srcs,nodes_set,dsts=jian_iteration(values,depth)
     if not srcs:
         return {},set(),{}
-    nodes_set=set()
-    for i in range(depth-2):
-        nodes_set.update(outs[i]&ins[depth-3-i])
     def f(iterator):
         for i in iterator:
             a=i['accname'].strip().lower()
