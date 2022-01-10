@@ -21,10 +21,10 @@ def build_index(df,max_depth,need3=True):
     uniq_edge = df.selectExpr(f'lower(trim({acc_name})) a',f'lower(trim({cntpty_acc_name})) b ').filter('a<>b ').groupby(['a','b']).max().persist()
     aconts = uniq_edge.selectExpr('a as n').groupby(['n']).max().union(uniq_edge.selectExpr('b as n').groupby(['n']).max()).groupby('n').max().toPandas().values
     name2id = {j[0]:i for i,j in enumerate(aconts)}
-    values = uniq_edge.rdd.map(lambda x:(name2id[x[0]],name2id[x[1]])).toDF(['a','b']).toPandas().values
+    edges = uniq_edge.rdd.map(lambda x:(name2id[x[0]],name2id[x[1]])).toDF(['a','b']).toPandas().values
     uniq_edge.unpersist()
     depth=3 if need3 else max_depth
-    srcs,nodes_set,dsts=jian_iteration(values,depth)
+    srcs,nodes_set,dsts=jian_iteration(edges,depth)
     if not srcs:
         return {},set(),{}
     def f(iterator):
