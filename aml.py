@@ -6,7 +6,6 @@
 from pyspark.sql import SparkSession,Window,functions as F
 from pyspark.conf import SparkConf
 from pyspark.rdd import portable_hash
-from jian_iteration import jian_iteration
 import numpy as np
 
 conf = SparkConf()
@@ -21,6 +20,7 @@ def build_index(df,max_depth,need3=True):
     values = uniq_edge.rdd.map(lambda x:(name2id[x[0]],name2id[x[1]])).toDF(['a','b']).toPandas().values
     uniq_edge.unpersist()
     depth=3 if need3 else max_depth
+    from jian_iteration import jian_iteration
     srcs,nodes_set,dsts=jian_iteration(values,depth)
     if not srcs:
         return {},set(),{}
