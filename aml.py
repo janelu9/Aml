@@ -93,7 +93,7 @@ def deep_search(iterator):
                                 q.extend([[n+[n1],e+[e_Ai]] for e_Ai in e_A])
             else:
                 yield [(n[0],n[-1],e[0][1],e[-1][1]),(n,e)]
-def mask(pre_tx,pre_ed,cur_tx,cur_st,cur_ed):
+def mask(pre_tx,pre_ed,cur_tx,cur_st,cur_ed,SIGMA):
     for idx,st in enumerate(cur_st):
         pre_get = pre_tx[pre_ed == st,:]
         pre_get = pre_get[cur_tx[idx,1]>= pre_get[:,1]]
@@ -101,7 +101,7 @@ def mask(pre_tx,pre_ed,cur_tx,cur_st,cur_ed):
             cur_tx[idx,-1] = 0
     cond = cur_tx[:,-1]>0
     return cur_tx[cond,:],cur_st[cond],cur_ed[cond]
-def income_expenditure_check_out(pre_tx,pre_ed,cur_tx,cur_st,cur_ed,pre_ed_set):
+def income_expenditure_check_out(pre_tx,pre_ed,cur_tx,cur_st,cur_ed,pre_ed_set,SIGMA):
     cur_st_set = set(cur_st)
     if cur_st_set == pre_ed_set:
         for idx,st in enumerate(cur_st):
@@ -113,7 +113,7 @@ def income_expenditure_check_out(pre_tx,pre_ed,cur_tx,cur_st,cur_ed,pre_ed_set):
                 return False,None
         return True,set(cur_ed)
     return False,None
-def fast_search(st_amts,ed_amts,batch,node,pre_tx,pre_ed,lst_tx,lst_st):
+def fast_search(st_amts,ed_amts,batch,node,pre_tx,pre_ed,lst_tx,lst_st,SIGMA):
     AMOUNT = sum(ed_amts)
     if abs(AMOUNT/sum(st_amts,1e-5)-1)<= SIGMA:
         st_ids = pre_tx[:,0]
@@ -125,11 +125,11 @@ def fast_search(st_amts,ed_amts,batch,node,pre_tx,pre_ed,lst_tx,lst_st):
             cur_tx,cur_id = np.unique(batch[:,mid,:],axis = 0,return_index = True)
             cur_tx = cur_tx.reshape(-1,4)
             cur_st,cur_ed = node[cur_id,mid],node[cur_id,mid+1]
-            cur_tx,cur_st,cur_ed = mask(pre_tx,pre_ed,cur_tx,cur_st,cur_ed)
+            cur_tx,cur_st,cur_ed = mask(pre_tx,pre_ed,cur_tx,cur_st,cur_ed,SIGMA)
             amts = cur_tx[:,-1]
             if abs(amts.sum()/AMOUNT-1)<= SIGMA:
                 mid_ids = cur_tx[:,0]
-                PASS,cur_ed_set = income_expenditure_check_out(pre_tx,pre_ed,cur_tx,cur_st,cur_ed,pre_ed_set,False)
+                PASS,cur_ed_set = income_expenditure_check_out(pre_tx,pre_ed,cur_tx,cur_st,cur_ed,pre_ed_set,SIGMA)
                 if PASS:
                     pre_ed_set = cur_ed_set
                     pre_tx,pre_ed = cur_tx,cur_ed
@@ -138,7 +138,7 @@ def fast_search(st_amts,ed_amts,batch,node,pre_tx,pre_ed,lst_tx,lst_st):
                     return None
             else:
                 return None
-        PASS,_ = income_expenditure_check_out(pre_tx,pre_ed,lst_tx,lst_st,lst_st,pre_ed_set)
+        PASS,_ = income_expenditure_check_out(pre_tx,pre_ed,lst_tx,lst_st,lst_st,pre_ed_set,SIGMA)
         if not PASS:
             return None
         t=tuple(st_ids)+tuple(MID)+tuple(ed_ids)
@@ -160,7 +160,7 @@ def main(iterator):
             for r in binary_search(st_amts,ed_amts,batch,node,st_tx,st_ed,ed_tx,ed_st,SIGMA):
                 yield r
         else:
-            r =  fast_search(st_amts,ed_amts,batch,node,st_tx,st_ed,ed_tx,ed_st)
+            r =  fast_search(st_amts,ed_amts,batch,node,st_tx,st_ed,ed_tx,ed_st,SIGMA)
             if r is not None:
                 yield r
             else:
