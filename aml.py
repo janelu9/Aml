@@ -6,12 +6,16 @@
 from pyspark.sql import SparkSession,Window,functions as F
 from pyspark.conf import SparkConf
 from pyspark.rdd import portable_hash
-import numpy as np
 
 conf = SparkConf()
 conf.set("spark.hadoop.mapred.output.compress", "false")
 spark = SparkSession.builder.config(conf = conf).enableHiveSupport().getOrCreate()
 sc = spark.sparkContext
+
+from pygraph import jian_iteration,binary_search
+import numpy as np
+from numba import jit
+
 df = spark.read.parquet("hdfs://localhost:9000/data")
 def build_index(df,max_depth,need3=True):
     uniq_edge = df.selectExpr('lower(trim(accname)) a','lower(trim(Cntpty_Acct_Name)) b ').filter('a<>b ').groupby(['a','b']).max().persist()
@@ -20,7 +24,6 @@ def build_index(df,max_depth,need3=True):
     values = uniq_edge.rdd.map(lambda x:(name2id[x[0]],name2id[x[1]])).toDF(['a','b']).toPandas().values
     uniq_edge.unpersist()
     depth=3 if need3 else max_depth
-    from jian_iteration import jian_iteration
     srcs,nodes_set,dsts=jian_iteration(values,depth)
     if not srcs:
         return {},set(),{}
@@ -111,83 +114,6 @@ def income_expenditure_check_out(pre_tx,pre_ed,cur_tx,cur_st,cur_ed,pre_ed_set):
                 return False,None
         return True,set(cur_ed)
     return False,None
-def binary_search(st_amts,ed_amts,batch,node,st_tx,st_ed,ed_tx,ed_st):
-    amts = np.hstack([st_amts,ed_amts])
-    pivot = len(st_amts)
-    upbound = min(sum(st_amts),sum(ed_amts))*(1+SIGMA)   
-    select = []
-    sum_list = []
-    def sovler1(index_list = [], n = 0):
-        st = sum([amts[i] for i in index_list if  i< pivot])   
-        ed = sum([amts[i] for i in index_list if  i>= pivot],1e-5)
-        if max(st,ed)>upbound:
-            return
-        des = st/ed    
-        if abs(des-1)<= SIGMA:
-            select.append(index_list)
-            sum_list.append(st)
-            return
-        if n ==  len(amts) :
-            return
-        sovler1(index_list+[n], n+1)
-        sovler1(index_list, n+1)
-    sovler1()
-    if select:
-        for sel_idx,AMOUNT in zip(select,sum_list):
-            select_index = np.array(sel_idx)
-            st_index = select_index[select_index<pivot]
-            ed_index = select_index[select_index>= pivot]-pivot
-            pre_tx = st_tx[st_index,:]
-            pre_ed = st_ed[st_index]
-            lst_tx = ed_tx[ed_index,:]
-            lst_st = ed_st[ed_index]
-            st_ids = pre_tx[:,0]            
-            ed_ids = lst_tx[:,0]
-            pre_ed_set = set(pre_ed)
-            depth = len(node[0])
-            MIDS = []
-            def recursive_search(pre_ed_set,pre_tx,pre_ed,MID = [],mid = 1):
-                if mid > depth-3:
-                    MIDS.append([MID,(pre_ed_set,pre_tx,pre_ed)])
-                    return                     
-                cur_tx,cur_id = np.unique(batch[:,mid,:],axis = 0,return_index = True)
-                cur_st,cur_ed = node[cur_id,mid],node[cur_id,mid+1]
-                cur_tx,cur_st,cur_ed = mask(pre_tx,pre_ed,cur_tx,cur_st,cur_ed)
-                amts = cur_tx[:,-1]
-                if amts.sum()<(1-SIGMA)*AMOUNT:
-                    return 
-                mid_indexs = []
-                def sovler2(index_list = [],n = 0,asum = 0):
-                    des = asum/AMOUNT-1
-                    if des>SIGMA:
-                        return
-                    if abs(des)<= SIGMA:
-                        mid_indexs.append(index_list)
-                        return
-                    if n ==  len(amts) :
-                        return
-                    sovler2(index_list+[n],n+1,asum+amts[n])
-                    sovler2(index_list,n+1,asum)
-                sovler2()
-                if not mid_indexs:
-                    return
-                for mid_index in mid_indexs:
-                    mid_ids = cur_tx[mid_index,0]
-                    cur_tx_tmp = cur_tx[mid_index,:]
-                    cur_st_tmp = cur_st[mid_index]
-                    cur_ed_tmp = cur_ed[mid_index]
-                    PASS,cur_ed_set = income_expenditure_check_out(pre_tx,pre_ed,cur_tx_tmp,cur_st_tmp,cur_ed_tmp,pre_ed_set)
-                    if PASS:
-                        recursive_search(cur_ed_set,cur_tx_tmp,cur_ed_tmp,MID+list(mid_ids),mid+1)
-                    else:
-                        return
-            recursive_search(pre_ed_set,pre_tx,pre_ed)
-            if MIDS:
-                for MID,(pre_ed_set,pre_tx,pre_ed) in MIDS:
-                    PASS,_ = income_expenditure_check_out(pre_tx,pre_ed,lst_tx,lst_st,lst_st,pre_ed_set)
-                    if PASS:
-                        t=tuple(st_ids)+tuple(MID)+tuple(ed_ids)
-                        yield (int(node[0][0]),int(node[0][-1]),-len(t)),(float(AMOUNT),depth,t)              
 def fast_search(st_amts,ed_amts,batch,node,pre_tx,pre_ed,lst_tx,lst_st):
     AMOUNT = sum(ed_amts)
     if abs(AMOUNT/sum(st_amts,1e-5)-1)<= SIGMA:
@@ -220,7 +146,8 @@ def fast_search(st_amts,ed_amts,batch,node,pre_tx,pre_ed,lst_tx,lst_st):
         yield (int(node[0][0]),int(node[0][-1]),-len(t)),(float(AMOUNT),depth,t)
     return None
 def main(iterator):
-    def search(batches,nodes):
+    @jit
+    def search(batches,nodes,SIGMA,LIMIT):
         batch = np.array(batches)
         node = np.array(nodes,int)
         st_tx,st_id = np.unique(batch[:, 0,:],axis = 0,return_index = True)
@@ -231,7 +158,7 @@ def main(iterator):
         ed_amts = ed_tx[:,-1]
         amts_len = len(st_amts)+len(ed_amts)
         if amts_len<= LIMIT :
-            for r in binary_search(st_amts,ed_amts,batch,node,st_tx,st_ed,ed_tx,ed_st):
+            for r in binary_search(st_amts,ed_amts,batch,node,st_tx,st_ed,ed_tx,ed_st,SIGMA):
                 yield r
         else:
             r =  fast_search(st_amts,ed_amts,batch,node,st_tx,st_ed,ed_tx,ed_st)
@@ -247,7 +174,7 @@ def main(iterator):
                     ed_st = mini_node[ed_id,-2]
                     st_amts = st_tx[:,-1]
                     ed_amts = ed_tx[:,-1]
-                    for r in binary_search(st_amts,ed_amts,mini_batch,mini_node,st_tx,st_ed,ed_tx,ed_st):
+                    for r in binary_search(st_amts,ed_amts,mini_batch,mini_node,st_tx,st_ed,ed_tx,ed_st,SIGMA):
                         yield r
     try:
         batches=[]
@@ -260,7 +187,7 @@ def main(iterator):
                 batches.append(egs)
                 nodes.append(nds)
             else:
-                for r in search(batches,nodes):
+                for r in search(batches,nodes,SIGMA,LIMIT):
                     yield r       
                 if (st_nd_,ed_nd_)!=(st_nd,ed_nd):
                     st_nd,ed_nd,st_dt=st_nd_,ed_nd_,st_dt_
@@ -275,7 +202,7 @@ def main(iterator):
                     st_nd,ed_nd,st_dt=nodes[0][0],nodes[0][-1],batches[0][1]
     except:
         if batches:
-            for r in search(batches,nodes):
+            for r in search(batches,nodes,SIGMA,LIMIT):
                 yield r
 def combine(iterator):
     base={}
