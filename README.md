@@ -41,8 +41,4 @@ Enjoy it ! 🤗
 
 \[1\] Harris C R, Millman K J, van der Walt S J, et al. Array programming with NumPy[J]. Nature, 2020, 585(7825): 357-362.
 
-<<<<<<< HEAD
 \[2\] Zaharia M, Chowdhury M, Franklin M J, et al. Spark: Cluster computing with working sets[J]. HotCloud, 2010, 10(10-10): 95.
-=======
-\[2\] Zaharia M, Chowdhury M, Franklin M J, et al. Spark: Cluster computing with working sets[J]. HotCloud, 2010, 10(10-10): 95.
->>>>>>> 34a72b1879188e66b6a8d5f0244728ca9d5b08d6
