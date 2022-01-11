@@ -18,7 +18,10 @@ import numpy as np
 df = spark.read.parquet("hdfs://localhost:9000/data")
 pay_id,acc_name,event_dt,tx_amt,cntpty_acc_name='id','accname','Event_Dt','Tx_Amt','Cntpty_Acct_Name'
 def build_index(df,max_depth,need3=True):
-    uniq_edge = df.selectExpr(f'lower(trim({acc_name})) a',f'lower(trim({cntpty_acc_name})) b ').filter('a<>b ').groupby(['a','b']).max().persist()
+    df=df.selectExpr(pay_id,f'lower(trim({acc_name})) {acc_name}',tx_amt,f'lower(trim({cntpty_acc_name})) {cntpty_acc_name}',
+                     f"unix_timestamp({event_dt},'yyyy-MM-dd')+float({pay_id})/1e5  time_stamp").filter(f'{acc_name}<>{cntpty_acc_name}')\
+    .withColumn('lag',F.coalesce(F.lag('time_stamp',-1).over(Window.partitionBy(acc_name,cntpty_acc_name).orderBy('time_stamp')),F.lit(np.inf))).persist()
+    uniq_edge = df.selectExpr(f'{acc_name} a',f'{cntpty_acc_name} b ').groupby(['a','b']).max().persist()
     aconts = uniq_edge.selectExpr('a as n').groupby(['n']).max().union(uniq_edge.selectExpr('b as n').groupby(['n']).max()).groupby('n').max().toPandas().values
     name2id = {j[0]:i for i,j in enumerate(aconts)}
     edges = uniq_edge.rdd.map(lambda x:(name2id[x[0]],name2id[x[1]])).toDF(['a','b']).toPandas().values
@@ -28,18 +31,11 @@ def build_index(df,max_depth,need3=True):
     if not srcs:return {},set(),{}
     def f(iterator):
         for i in iterator:
-            if i[acc_name] is not None and i[cntpty_acc_name] is not None:
-                a,b=i[acc_name].strip().lower(),i[cntpty_acc_name].strip().lower()
-                if a!=b:
-                    a = name2id[a]
-                    b = name2id[b]
-                    if (a in nodes_set or a in srcs) and (b in nodes_set or b in dsts):
-                        yield i[pay_id],a,i[tx_amt],b,i['time_stamp'],i['lag']
-    data_values = df.withColumn('time_stamp',F.unix_timestamp(event_dt,'yyyy-MM-dd')+F.col(pay_id)/1e28)\
-    .withColumn('lag',F.coalesce(F.lag('time_stamp',-1).over(Window.partitionBy(acc_name,cntpty_acc_name).orderBy('time_stamp')),F.lit(np.inf)))\
-    .select([pay_id,acc_name,tx_amt,cntpty_acc_name,'time_stamp','lag'])\
-    .rdd.mapPartitions(f).toDF()\
-    .toPandas().values
+            a = name2id[i[acc_name]]
+            b = name2id[i[cntpty_acc_name]]
+            if (a in nodes_set or a in srcs) and (b in nodes_set or b in dsts):
+                yield i[pay_id],a,i[tx_amt],b,i['time_stamp'],i['lag']
+    data_values = df.rdd.mapPartitions(f).toDF().toPandas().values
     D = {}
     for k,a,m,b,t,l in data_values:
         if a not in D:
@@ -193,12 +189,12 @@ def main(iterator):
                     batches = [egs_]
                     nodes = [nds_]
                 else:
-                    while batches and batches[0][1]+T<ed_dt_ :
+                    while batches and batches[0][0][1]+T<ed_dt_ :
                         batches.pop(0)
                         nodes.pop(0)
                     batches.append(egs)
                     nodes.append(nds)
-                    st_nd,ed_nd,st_dt=nodes[0][0],nodes[0][-1],batches[0][1]
+                    st_nd,ed_nd,st_dt=nodes[0][0],nodes[0][-1],batches[0][0][1]
     except:
         if batches:
             for r in search(batches,nodes,SIGMA,LIMIT):
