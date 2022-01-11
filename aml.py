@@ -25,8 +25,7 @@ def build_index(df,max_depth,need3=True):
     uniq_edge.unpersist()
     depth=3 if need3 else max_depth
     srcs,nodes_set,dsts=jian_iteration(edges,depth)
-    if not srcs:
-        return {},set(),{}
+    if not srcs:return {},set(),{}
     def f(iterator):
         for i in iterator:
             if i[acc_name] is not None and i[cntpty_acc_name] is not None:
@@ -114,7 +113,8 @@ def income_expenditure_check_out(pre_tx,pre_ed,cur_tx,cur_st,cur_ed,pre_ed_set,S
                 return False,None
         return True,set(cur_ed)
     return False,None
-def fast_search(st_amts,ed_amts,batch,node,pre_tx,pre_ed,lst_tx,lst_st,SIGMA):
+def fast_search(batch,node,pre_tx,pre_ed,lst_tx,lst_st,SIGMA):
+    st_amts,ed_amts = st_tx[:,-1],ed_tx[:,-1]
     AMOUNT = sum(ed_amts)
     if abs(AMOUNT/sum(st_amts,1e-5)-1)<= SIGMA:
         st_ids = pre_tx[:,0]
@@ -157,10 +157,10 @@ def main(iterator):
         ed_amts = ed_tx[:,-1]
         amts_len = len(st_amts)+len(ed_amts)
         if amts_len<= LIMIT :
-            for r in binary_search(st_amts,ed_amts,batch,node,st_tx,st_ed,ed_tx,ed_st,SIGMA):
+            for r in binary_search(batch,node,st_tx,st_ed,ed_tx,ed_st,SIGMA):
                 yield r
         else:
-            r =  fast_search(st_amts,ed_amts,batch,node,st_tx,st_ed,ed_tx,ed_st,SIGMA)
+            r =  fast_search(batch,node,st_tx,st_ed,ed_tx,ed_st,SIGMA)
             if r is not None:
                 yield r
             else:
@@ -173,7 +173,7 @@ def main(iterator):
                     ed_st = mini_node[ed_id,-2]
                     st_amts = st_tx[:,-1]
                     ed_amts = ed_tx[:,-1]
-                    for r in binary_search(st_amts,ed_amts,mini_batch,mini_node,st_tx,st_ed,ed_tx,ed_st,SIGMA):
+                    for r in binary_search(mini_batch,mini_node,st_tx,st_ed,ed_tx,ed_st,SIGMA):
                         yield r
     try:
         batches=[]
