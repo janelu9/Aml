@@ -139,7 +139,7 @@ def fast_search(batch,node,pre_tx,pre_ed,lst_tx,lst_st,SIGMA):
         if not PASS:
             return None
         t=tuple(st_ids)+tuple(MID)+tuple(ed_ids)
-        yield (int(node[0][0]),int(node[0][-1]),-len(t)),(float(AMOUNT),depth,t)
+        return (int(node[0][0]),int(node[0][-1]),-len(t)),(float(AMOUNT),depth,t)
     return None
 def main(iterator):
     def search(batches,nodes,SIGMA,LIMIT):
