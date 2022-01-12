@@ -19,7 +19,8 @@ For example：
 You can run
 `spark-submit  --files some_ideas-cp36-win_amd64.pyd aml.py` in windows environment or `spark-submit  --files some_ideas-cp36-x86_64-linux.so aml.py` on linux platform to get the payment chains seem like money laundering. Same 'batch_id' indicates these transactions belong to a complete chain. Field 'depth' indicates the length of the chain. 
 
-![image](https://user-images.githubusercontent.com/24219258/148644725-afb26de1-160e-4589-a035-3046a632b098.png)
+![1](https://user-images.githubusercontent.com/24219258/149096741-85d7c637-a8bc-489e-a499-9f4a1eb047ea.png)
+
 
 |id|batch_id|src|dst|amount|depth|accname|  Event_Dt|Tx_Amt|Cntpty_Acct_Name|
 | -- |--- | --- | ---| ---- |--- | ---- | --------- | ----- | ---- |
