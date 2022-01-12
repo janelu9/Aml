@@ -103,8 +103,8 @@ def search(batch,node,SIGMA,LIMIT):
                 for r in accurate_search(batch[i:j,:,:],node[i:j,:],SIGMA):
                     yield r
                 while len(count_set)>LIMIT:
-                    count_set.remove(batch[i,0,0])
-                    count_set.remove(batch[i,-1,0])
+                    if batch[i, 0,0] in count_set:count_set.remove(batch[i, 0,0])
+                    if batch[i,-1,0] in count_set:count_set.remove(batch[i,-1,0])
                     i+=1
         for r in accurate_search(batch[i:,:,:],node[i:,:],SIGMA):
             yield r
