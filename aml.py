@@ -12,7 +12,7 @@ conf.set("spark.hadoop.mapred.output.compress", "false")
 spark = SparkSession.builder.config(conf = conf).enableHiveSupport().getOrCreate()
 sc = spark.sparkContext
 
-from pygraph import jian_iteration,binary_search
+from pygraph import lu_iteration,accurate_search,fast_search
 import numpy as np
 
 df = spark.read.parquet("hdfs://localhost:9000/data")
@@ -27,7 +27,7 @@ def build_index(df,max_depth,need3=True):
     edges = uniq_edge.rdd.map(lambda x:(name2id[x[0]],name2id[x[1]])).toDF(['a','b']).toPandas().values
     uniq_edge.unpersist()
     depth=3 if need3 else max_depth
-    srcs,nodes_set,dsts=jian_iteration(edges,depth)
+    srcs,nodes_set,dsts=lu_iteration(edges,depth)
     if not srcs:return {},set(),{}
     def f(iterator):
         for i in iterator:
@@ -35,7 +35,7 @@ def build_index(df,max_depth,need3=True):
             b = name2id[i[cntpty_acc_name]]
             if (a in nodes_set or a in srcs) and (b in nodes_set or b in dsts):
                 yield i[pay_id],a,i[tx_amt],b,i['time_stamp'],i['lag']
-    data_values = df.rdd.mapPartitions(f).toDF().toPandas().values
+    data_values = df.rdd.mapPartitions(f).collect()
     D = {}
     for k,a,m,b,t,l in data_values:
         if a not in D:
@@ -89,115 +89,53 @@ def deep_search(iterator):
                                 q.extend([[n+[n1],e+[e_Ai]] for e_Ai in e_A])
             else:
                 yield [(n[0],n[-1],e[0][1],e[-1][1]),(n,e)]
-def mask(pre_tx,pre_ed,cur_tx,cur_st,cur_ed,SIGMA):
-    for idx,st in enumerate(cur_st):
-        pre_get = pre_tx[pre_ed == st,:]
-        pre_get = pre_get[cur_tx[idx,1]>= pre_get[:,1]]
-        if pre_get[:,-1].sum()*(1+SIGMA)<cur_tx[idx,-1]:
-            cur_tx[idx,-1] = 0
-    cond = cur_tx[:,-1]>0
-    return cur_tx[cond,:],cur_st[cond],cur_ed[cond]
-def income_expenditure_check_out(pre_tx,pre_ed,cur_tx,cur_st,cur_ed,pre_ed_set,SIGMA):
-    cur_st_set = set(cur_st)
-    if cur_st_set == pre_ed_set:
-        for idx,st in enumerate(cur_st):
-            pre_get = pre_tx[pre_ed == st,:]
-            all_get = pre_get[cur_tx[idx,1]>= pre_get[:,1]][:,-1].sum()
-            cur_out = cur_tx[cur_st == st,:]
-            all_out = cur_out[cur_tx[idx,1]>= cur_out[:,1]][:,-1].sum()
-            if all_get<= all_out*(1-SIGMA):
-                return False,None
-        return True,set(cur_ed)
-    return False,None
-def fast_search(batch,node,pre_tx,pre_ed,lst_tx,lst_st,SIGMA):
-    st_amts,ed_amts = st_tx[:,-1],ed_tx[:,-1]
-    AMOUNT = sum(ed_amts)
-    if abs(AMOUNT/sum(st_amts,1e-5)-1)<= SIGMA:
-        st_ids = pre_tx[:,0]
-        ed_ids = lst_tx[:,0]
-        pre_ed_set = set(pre_ed)
-        depth = len(node[0])
-        MID = []
-        for mid in range(1,depth-2):
-            cur_tx,cur_id = np.unique(batch[:,mid,:],axis = 0,return_index = True)
-            cur_tx = cur_tx.reshape(-1,4)
-            cur_st,cur_ed = node[cur_id,mid],node[cur_id,mid+1]
-            cur_tx,cur_st,cur_ed = mask(pre_tx,pre_ed,cur_tx,cur_st,cur_ed,SIGMA)
-            amts = cur_tx[:,-1]
-            if abs(amts.sum()/AMOUNT-1)<= SIGMA:
-                mid_ids = cur_tx[:,0]
-                PASS,cur_ed_set = income_expenditure_check_out(pre_tx,pre_ed,cur_tx,cur_st,cur_ed,pre_ed_set,SIGMA)
-                if PASS:
-                    pre_ed_set = cur_ed_set
-                    pre_tx,pre_ed = cur_tx,cur_ed
-                    MID.extend(list(mid_ids))
-                else:
-                    return None
-            else:
-                return None
-        PASS,_ = income_expenditure_check_out(pre_tx,pre_ed,lst_tx,lst_st,lst_st,pre_ed_set,SIGMA)
-        if not PASS:
-            return None
-        t=tuple(st_ids)+tuple(MID)+tuple(ed_ids)
-        return (int(node[0][0]),int(node[0][-1]),-len(t)),(float(AMOUNT),depth,t)
-    return None
+def search(batch,node,SIGMA,LIMIT):
+    batch = np.array(batch)
+    node = np.array(node,int)
+    r =  fast_search(batch,node,SIGMA)
+    if r is not None:
+        yield r
+    else:
+        i,count_set,length=0,set(),len(batch)
+        for j in range(length):
+            count_set.update({batch[j,0,0],batch[j,-1,0]})
+            if len(count_set)>LIMIT:
+                for r in accurate_search(batch[i:j,:,:],node[i:j,:],SIGMA):
+                    yield r
+                while len(count_set)>LIMIT:
+                    count_set.remove(batch[i,0,0])
+                    count_set.remove(batch[i,-1,0])
+                    i+=1
+        for r in accurate_search(batch[i:,:,:],node[i:,:],SIGMA):
+            yield r
 def main(iterator):
-    def search(batches,nodes,SIGMA,LIMIT):
-        batch = np.array(batches)
-        node = np.array(nodes,int)
-        st_tx,st_id = np.unique(batch[:, 0,:],axis = 0,return_index = True)
-        st_ed = node[st_id,1]
-        ed_tx,ed_id = np.unique(batch[:,-1,:],axis = 0,return_index = True)
-        ed_st = node[ed_id,-2]
-        st_amts = st_tx[:,-1]
-        ed_amts = ed_tx[:,-1]
-        amts_len = len(st_amts)+len(ed_amts)
-        if amts_len<= LIMIT :
-            for r in binary_search(batch,node,st_tx,st_ed,ed_tx,ed_st,SIGMA):
-                yield r
-        else:
-            r =  fast_search(batch,node,st_tx,st_ed,ed_tx,ed_st,SIGMA)
-            if r is not None:
-                yield r
-            else:
-                for j in range(len(batch)):
-                    mini_batch = batch[j:j+LIMIT,:,:]
-                    mini_node = node[j:j+LIMIT,:]
-                    st_tx,st_id = np.unique(mini_batch[:, 0,:],axis = 0,return_index = True)
-                    st_ed = mini_node[st_id,1]
-                    ed_tx,ed_id = np.unique(mini_batch[:,-1,:],axis = 0,return_index = True)
-                    ed_st = mini_node[ed_id,-2]
-                    st_amts = st_tx[:,-1]
-                    ed_amts = ed_tx[:,-1]
-                    for r in binary_search(mini_batch,mini_node,st_tx,st_ed,ed_tx,ed_st,SIGMA):
-                        yield r
     try:
-        batches=[]
+        batch_buffer=[]
         (st_nd,ed_nd,st_dt,_),(nds,egs)= next(iterator)
-        batches.append(egs)
+        batch_buffer.append(egs)
         nodes = [nds]
         while True:
             (st_nd_,ed_nd_,st_dt_,ed_dt_),(nds,egs)= next(iterator)
             if (st_nd_,ed_nd_)==(st_nd,ed_nd) and ed_dt_<st_dt+T:
-                batches.append(egs)
+                batch_buffer.append(egs)
                 nodes.append(nds)
             else:
-                for r in search(batches,nodes,SIGMA,LIMIT):
+                for r in search(batch_buffer,nodes,SIGMA,LIMIT):
                     yield r       
                 if (st_nd_,ed_nd_)!=(st_nd,ed_nd):
                     st_nd,ed_nd,st_dt=st_nd_,ed_nd_,st_dt_
-                    batches = [egs_]
+                    batch_buffer = [egs_]
                     nodes = [nds_]
                 else:
-                    while batches and batches[0][0][1]+T<ed_dt_ :
-                        batches.pop(0)
-                        nodes.pop(0)
-                    batches.append(egs)
+                    batch_buffer.append(egs)
                     nodes.append(nds)
-                    st_nd,ed_nd,st_dt=nodes[0][0],nodes[0][-1],batches[0][0][1]
+                    while batch_buffer[0][0][1]+T<ed_dt_ :
+                        batch_buffer.pop(0)
+                        nodes.pop(0)
+                    st_nd,ed_nd,st_dt=nodes[0][0],nodes[0][-1],batch_buffer[0][0][1]
     except:
-        if batches:
-            for r in search(batches,nodes,SIGMA,LIMIT):
+        if batch_buffer:
+            for r in search(batch_buffer,nodes,SIGMA,LIMIT):
                 yield r
 def combine(iterator):
     base={}
