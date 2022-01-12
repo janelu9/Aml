@@ -29,13 +29,13 @@ def build_index(df,MAX_DEPTH,need3=True):
     depth=3 if need3 else MAX_DEPTH
     srcs,nodes_set,dsts=lu_iteration(edges,depth)
     if not srcs:return {},set(),{}
-    def f(iterator):
+    def filtrate(iterator):
         for i in iterator:
             a = name2id[i[acc_name]]
             b = name2id[i[cntpty_acc_name]]
             if (a in nodes_set or a in srcs) and (b in nodes_set or b in dsts):
                 yield i[pay_id],a,i[tx_amt],b,i['time_stamp'],i['lag']
-    data_values = df.rdd.mapPartitions(f).collect()
+    data_values = df.rdd.mapPartitions(filtrate).collect()
     df.unpersist()
     D = {}
     for k,a,m,b,t,l in data_values:
