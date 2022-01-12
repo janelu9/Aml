@@ -54,8 +54,8 @@ SIGMA = 0.05;
 MAX_DEPTH = 4;
 P = 16;
 LIMIT = 20;
-need3=True
-D,srcs,id2name=build_index(df,MAX_DEPTH,need3)
+need3 = True
+D,srcs,id2name = build_index(df,MAX_DEPTH,need3)
 def prepares(srcs):
     for a in srcs:
         for b in D[a]:
@@ -65,9 +65,9 @@ def prepares(srcs):
                     for c in Db:
                         if c!= a:
                             e_bc = Db[c]
-                            cond_w = (e_ab[1]<e_bc[:,1]) & (e_ab[1]+T>e_bc[:,1])
+                            cond_w = (e_ab[1] < e_bc[:,1]) & (e_ab[1]+T > e_bc[:,1])
                             if np.any(cond_w):
-                                cond_n = cond_w & (e_ab[2]>e_bc[:,1])
+                                cond_n = cond_w & (e_ab[2] > e_bc[:,1])
                                 e_bc =  e_bc[cond_n,:] if np.any(cond_n) else e_bc[cond_w,:][0:1,:]
                                 for e_bc_i in e_bc:
                                     yield ((a,c,e_ab[1],e_bc_i[1]),[[a,b,c],[e_ab,e_bc_i]])
@@ -76,28 +76,28 @@ def deep_search(iterator):
         q=[item[1]]
         while q:
             n,e = q.pop(0)
-            if len(n)<MAX_DEPTH:
+            if len(n) < MAX_DEPTH:
                 Dn = D.get(n[-1],None)
                 if Dn is not None:
                     n_set = set(n)
                     for n1 in Dn:
                         if n1 not in n_set:
                             e_A = Dn[n1]
-                            cond_w = (e[-1][1]<e_A[:,1]) & (e[0][1]+T>e_A[:,1])
+                            cond_w = (e[-1][1] < e_A[:,1]) & (e[0][1]+T > e_A[:,1])
                             if np.any(cond_w):
-                                cond_n = cond_w & (e[-1][2]>e_A[:,1])
+                                cond_n = cond_w & (e[-1][2] > e_A[:,1])
                                 e_A =  e_A[cond_n,:] if np.any(cond_n) else e_A[cond_w,:][0:1,:]
                                 q.extend([[n+[n1],e+[e_Ai]] for e_Ai in e_A])
             else:
                 yield [(n[0],n[-1],e[0][1],e[-1][1]),(n,e)]
-def search(batch,node,SIGMA,LIMIT):
+def graph_detect(batch,node,SIGMA,LIMIT):
     batch = np.array(batch)
     node = np.array(node,int)
-    r =  fast_search(batch,node,SIGMA)
+    r = fast_search(batch,node,SIGMA)
     if r is not None:
         yield r
     else:
-        i,count_set,length=0,set(),len(batch)
+        i,count_set,length = 0,set(),len(batch)
         for j in range(length):
             count_set.update({batch[j,0,0],batch[j,-1,0]})
             if len(count_set)>LIMIT:
@@ -111,44 +111,44 @@ def search(batch,node,SIGMA,LIMIT):
             yield r
 def main(iterator):
     try:
-        batch_buffer=[]
-        (st_nd,ed_nd,st_dt,_),(nds,egs)= next(iterator)
+        batch_buffer = []
+        (st_nd,ed_nd,st_dt,_),(nds,egs) = next(iterator)
         batch_buffer.append(egs)
         nodes = [nds]
         while True:
-            (st_nd_,ed_nd_,st_dt_,ed_dt_),(nds,egs)= next(iterator)
-            if (st_nd_,ed_nd_)==(st_nd,ed_nd) and ed_dt_<st_dt+T:
+            (st_nd_,ed_nd_,st_dt_,ed_dt_),(nds,egs) = next(iterator)
+            if (st_nd_,ed_nd_) == (st_nd,ed_nd) and ed_dt_< st_dt+T:
                 batch_buffer.append(egs)
                 nodes.append(nds)
             else:
-                for r in search(batch_buffer,nodes,SIGMA,LIMIT):
+                for r in graph_detect(batch_buffer,nodes,SIGMA,LIMIT):
                     yield r       
-                if (st_nd_,ed_nd_)!=(st_nd,ed_nd):
-                    st_nd,ed_nd,st_dt=st_nd_,ed_nd_,st_dt_
-                    batch_buffer, nodes= [egs],[nds]
+                if (st_nd_,ed_nd_) != (st_nd,ed_nd):
+                    st_nd,ed_nd,st_dt = st_nd_,ed_nd_,st_dt_
+                    batch_buffer, nodes = [egs],[nds]
                 else:
                     batch_buffer.append(egs)
                     nodes.append(nds)
-                    while batch_buffer[0][0][1]+T<ed_dt_ :
+                    while batch_buffer[0][0][1]+T < ed_dt_ :
                         batch_buffer.pop(0)
                         nodes.pop(0)
-                    st_nd,ed_nd,st_dt=nodes[0][0],nodes[0][-1],batch_buffer[0][0][1]
+                    st_nd,ed_nd,st_dt = nodes[0][0],nodes[0][-1],batch_buffer[0][0][1]
     except:
         if batch_buffer:
-            for r in search(batch_buffer,nodes,SIGMA,LIMIT):
+            for r in graph_detect(batch_buffer,nodes,SIGMA,LIMIT):
                 yield r
 def drop_duplicates(iterator):
-    base={}
+    base = {}
     for item in iterator:
-        k,s=item[0][:2],set(item[1][-1])
+        k,s = item[0][:2],set(item[1][-1])
         if k not in base:
-            base={item[0][:2]:[set(item[1][-1])]}
+            base = {item[0][:2]:[set(item[1][-1])]}
             yield item
         else:
-            not_sub=True
+            not_sub = True
             for S in base[k]:
                 if len(s)>2*len(s-S):
-                    not_sub=False
+                    not_sub = False
                     break
             if not_sub:
                 base[k].append(s)
@@ -156,31 +156,31 @@ def drop_duplicates(iterator):
 srcs_rdd = sc.parallelize(srcs,min(P,max(len(srcs),1)))
 space3 = srcs_rdd.mapPartitions(prepares).persist()
 chains_deeper = space3.mapPartitions(deep_search)\
-.repartitionAndSortWithinPartitions(P,partitionFunc=lambda x:portable_hash((x[0],x[1])))\
+.repartitionAndSortWithinPartitions(P,partitionFunc = lambda x:portable_hash((x[0],x[1])))\
 .mapPartitions(main).distinct()\
-.repartitionAndSortWithinPartitions(P,partitionFunc=lambda x:portable_hash((x[0],x[1])))\
+.repartitionAndSortWithinPartitions(P,partitionFunc = lambda x:portable_hash((x[0],x[1])))\
 .mapPartitions(drop_duplicates).persist()
 if need3 :
     deeper_id_set = [set(i) for i in chains_deeper.map(lambda x:x[1][-1]).collect()]
     def downward_drop_duplicates(iterator):
         for item in iterator:
-            s=set(item[1][-1])
-            not_sub=True
+            s = set(item[1][-1])
+            not_sub = True
             for S in deeper_id_set:
-                if len(s)>2*len(s-S):
-                    not_sub=False
+                if len(s) > 2*len(s-S):
+                    not_sub = False
                     break
             if not_sub:
                 yield item
-    chains3 = space3.repartitionAndSortWithinPartitions(P,partitionFunc=lambda x:portable_hash((x[0],x[1])))\
+    chains3 = space3.repartitionAndSortWithinPartitions(P,partitionFunc = lambda x:portable_hash((x[0],x[1])))\
     .mapPartitions(main).distinct()\
-    .repartitionAndSortWithinPartitions(P,partitionFunc=lambda x:portable_hash((x[0],x[1])))\
+    .repartitionAndSortWithinPartitions(P,partitionFunc = lambda x:portable_hash((x[0],x[1])))\
     .mapPartitions(drop_duplicates).mapPartitions(downward_drop_duplicates)
     space3.unpersist()
-    result=chains_deeper.union(chains3).zipWithIndex()
+    result = chains_deeper.union(chains3).zipWithIndex()
     chains_deeper.unpersist()
 else:
-    result=chains_deeper.zipWithIndex()
+    result = chains_deeper.zipWithIndex()
 def flatID(iterator):
     for (k,(*v,s)),idx in iterator:
         for payid in s:
