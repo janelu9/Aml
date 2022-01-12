@@ -137,7 +137,7 @@ def main(iterator):
         if batch_buffer:
             for r in search(batch_buffer,nodes,SIGMA,LIMIT):
                 yield r
-def combine(iterator):
+def drop_duplicates(iterator):
     base={}
     for item in iterator:
         k,s=item[0][:2],set(item[1][-1])
@@ -159,10 +159,10 @@ srcs_rdd4 = srcs_rdd2.mapPartitions(deep_search)\
 .repartitionAndSortWithinPartitions(P,partitionFunc=lambda x:portable_hash((x[0],x[1])))\
 .mapPartitions(main).distinct()\
 .repartitionAndSortWithinPartitions(P,partitionFunc=lambda x:portable_hash((x[0],x[1])))\
-.mapPartitions(combine).persist()
+.mapPartitions(drop_duplicates).persist()
 if need3 :
     base4 = [set(i) for i in srcs_rdd4.map(lambda x:x[1][-1]).collect()]
-    def combine3(iterator):
+    def downward_drop_duplicates(iterator):
         for item in iterator:
             s=set(item[1][-1])
             not_sub=True
@@ -175,7 +175,7 @@ if need3 :
     srcs_rdd3 = srcs_rdd2.repartitionAndSortWithinPartitions(P,partitionFunc=lambda x:portable_hash((x[0],x[1])))\
     .mapPartitions(main).distinct()\
     .repartitionAndSortWithinPartitions(P,partitionFunc=lambda x:portable_hash((x[0],x[1])))\
-    .mapPartitions(combine).mapPartitions(combine3)
+    .mapPartitions(drop_duplicates).mapPartitions(downward_drop_duplicates)
     srcs_rdd2.unpersist()
     result=srcs_rdd4.union(srcs_rdd3).zipWithIndex()
     srcs_rdd4.unpersist()
