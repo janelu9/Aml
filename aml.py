@@ -64,7 +64,7 @@ def prepares(srcs):
                     for c in Db:
                         if c!= a:
                             e_bc = Db[c]
-                            cond_w = (e_ab[1]<= e_bc[:,1]) & (e_ab[1]+T>= e_bc[:,1])
+                            cond_w = (e_ab[1]<e_bc[:,1]) & (e_ab[1]+T>e_bc[:,1])
                             if np.any(cond_w):
                                 cond_n = cond_w & (e_ab[2]>e_bc[:,1])
                                 e_bc =  e_bc[cond_n,:] if np.any(cond_n) else e_bc[cond_w,:][0:1,:]
@@ -82,7 +82,7 @@ def deep_search(iterator):
                     for n1 in Dn:
                         if n1 not in n_set:
                             e_A = Dn[n1]
-                            cond_w = (e[-1][1]<= e_A[:,1]) & (e[0][1]+T>= e_A[:,1])
+                            cond_w = (e[-1][1]<e_A[:,1]) & (e[0][1]+T>e_A[:,1])
                             if np.any(cond_w):
                                 cond_n = cond_w & (e[-1][2]>e_A[:,1])
                                 e_A =  e_A[cond_n,:] if np.any(cond_n) else e_A[cond_w,:][0:1,:]
