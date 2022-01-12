@@ -154,37 +154,37 @@ def drop_duplicates(iterator):
                 base[k].append(s)
                 yield item
 srcs_rdd = sc.parallelize(srcs,min(P,max(len(srcs),1)))
-srcs_rdd2 = srcs_rdd.mapPartitions(prepares).persist()
-srcs_rdd4 = srcs_rdd2.mapPartitions(deep_search)\
+space3 = srcs_rdd.mapPartitions(prepares).persist()
+chains_deeper = space3.mapPartitions(deep_search)\
 .repartitionAndSortWithinPartitions(P,partitionFunc=lambda x:portable_hash((x[0],x[1])))\
 .mapPartitions(main).distinct()\
 .repartitionAndSortWithinPartitions(P,partitionFunc=lambda x:portable_hash((x[0],x[1])))\
 .mapPartitions(drop_duplicates).persist()
 if need3 :
-    base4 = [set(i) for i in srcs_rdd4.map(lambda x:x[1][-1]).collect()]
+    deeper_id_set = [set(i) for i in chains_deeper.map(lambda x:x[1][-1]).collect()]
     def downward_drop_duplicates(iterator):
         for item in iterator:
             s=set(item[1][-1])
             not_sub=True
-            for S in base4:
+            for S in deeper_id_set:
                 if len(s)>2*len(s-S):
                     not_sub=False
                     break
             if not_sub:
                 yield item
-    srcs_rdd3 = srcs_rdd2.repartitionAndSortWithinPartitions(P,partitionFunc=lambda x:portable_hash((x[0],x[1])))\
+    chains3 = space3.repartitionAndSortWithinPartitions(P,partitionFunc=lambda x:portable_hash((x[0],x[1])))\
     .mapPartitions(main).distinct()\
     .repartitionAndSortWithinPartitions(P,partitionFunc=lambda x:portable_hash((x[0],x[1])))\
     .mapPartitions(drop_duplicates).mapPartitions(downward_drop_duplicates)
-    srcs_rdd2.unpersist()
-    result=srcs_rdd4.union(srcs_rdd3).zipWithIndex()
-    srcs_rdd4.unpersist()
+    space3.unpersist()
+    result=chains_deeper.union(chains3).zipWithIndex()
+    chains_deeper.unpersist()
 else:
-    result=srcs_rdd4.zipWithIndex()
+    result=chains_deeper.zipWithIndex()
 def flatID(iterator):
     for (k,(*v,s)),idx in iterator:
         for payid in s:
             yield (idx,id2name[k[0]],id2name[k[1]],v[0],v[1],int(payid))
-RESULT = result.mapPartitions(flatID).toDF(f'''batch_id: int, src: string, dst: string, amount: float, depth: int, {pay_id}: int''')
-RESULT.join(df,pay_id,'left').repartition(1).write.parquet("hdfs://localhost:9000/RESULT",mode = 'overwrite')
-spark.read.parquet("hdfs://localhost:9000/RESULT").show()
+result = result.mapPartitions(flatID).toDF(f'''batch_id: int, src: string, dst: string, amount: float, depth: int, {pay_id}: int''')
+result.join(df,pay_id,'left').repartition(1).write.parquet("hdfs://localhost:9000/result",mode = 'overwrite')
+spark.read.parquet("hdfs://localhost:9000/result").show()
