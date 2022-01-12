@@ -124,8 +124,8 @@ def main(iterator):
                     yield r       
                 if (st_nd_,ed_nd_)!=(st_nd,ed_nd):
                     st_nd,ed_nd,st_dt=st_nd_,ed_nd_,st_dt_
-                    batch_buffer = [egs_]
-                    nodes = [nds_]
+                    batch_buffer = [egs]
+                    nodes = [nds]
                 else:
                     batch_buffer.append(egs)
                     nodes.append(nds)
