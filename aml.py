@@ -12,7 +12,7 @@ conf.set("spark.hadoop.mapred.output.compress", "false")
 spark = SparkSession.builder.config(conf = conf).enableHiveSupport().getOrCreate()
 sc = spark.sparkContext
 
-from pygraph import lu_iteration,accurate_search,fast_search
+from some_ideas import lu_iteration,accurate_search,fast_search
 import numpy as np
 
 df = spark.read.parquet("hdfs://localhost:9000/data")
