@@ -12,7 +12,7 @@ conf.set("spark.hadoop.mapred.output.compress", "false")
 spark = SparkSession.builder.config(conf = conf).enableHiveSupport().getOrCreate()
 sc = spark.sparkContext
 
-from some_ideas import lu_iteration,accurate_search,fast_search
+from some_ideas import Lu_iteration,accurate_search,fast_search
 import numpy as np
 
 df = spark.read.parquet("hdfs://localhost:9000/data")
@@ -27,7 +27,7 @@ def build_index(df,MAX_DEPTH,need3=True):
     edges = uniq_edge.rdd.map(lambda x:(name2id[x[0]],name2id[x[1]])).toDF(['a','b']).toPandas().values
     uniq_edge.unpersist()
     depth=3 if need3 else MAX_DEPTH
-    srcs,nodes_set,dsts=lu_iteration(edges,depth)
+    srcs,nodes_set,dsts=Lu_iteration(edges,depth)
     if not srcs:return {},set(),{}
     def filtrate(iterator):
         for i in iterator:
