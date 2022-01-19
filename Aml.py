@@ -87,7 +87,8 @@ def deep_search(iterator):
                             if np.any(cond_w):
                                 cond_n = cond_w & (e[-1][2] > e_A[:,1])
                                 e_A =  e_A[cond_n,:] if np.any(cond_n) else e_A[cond_w,:][0:1,:]
-                                q.extend([[n+[n1],e+[e_Ai]] for e_Ai in e_A])
+                                for e_Ai in e_A:
+                                    q.append([n+[n1],e+[e_Ai]])
             else:
                 yield [(n[0],n[-1],e[0][1],e[-1][1]),(n,e)]
 def graph_detect(batch,node,SIGMA,LIMIT):
