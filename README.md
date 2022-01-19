@@ -44,4 +44,4 @@ Enjoy it ! 🤗
 
 \[2\] [Zaharia M, Chowdhury M, Franklin M J, et al. Spark: Cluster computing with working sets[J]. HotCloud, 2010, 10(10-10): 95.](https://www2.eecs.berkeley.edu/Pubs/TechRpts/2010/EECS-2010-53.html)
 
-\[3\] [combination-sum-ii](https://leetcode-cn.com/problems/combination-sum-ii/solution/hui-su-suan-fa-jian-zhi-python-dai-ma-java-dai-m-3/)
+\[3\] [Combination Sum II](https://leetcode.com/problems/combination-sum-ii/solution/)

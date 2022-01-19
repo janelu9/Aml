@@ -174,8 +174,7 @@ if need3 :
             if not_sub:
                 yield item
     chains3 = space3.repartitionAndSortWithinPartitions(P,partitionFunc = lambda x:portable_hash((x[0],x[1])))\
-    .mapPartitions(main).distinct()\
-    .repartitionAndSortWithinPartitions(P,partitionFunc = lambda x:portable_hash((x[0],x[1])))\
+    .mapPartitions(main).distinct().repartitionAndSortWithinPartitions(P,partitionFunc = lambda x:portable_hash((x[0],x[1])))\
     .mapPartitions(drop_duplicates).mapPartitions(downward_drop_duplicates)
     space3.unpersist()
     result = chains_deeper.union(chains3).zipWithIndex()
