@@ -18,9 +18,7 @@ import numpy as np
 df = spark.read.parquet("hdfs://localhost:9000/data")
 pay_id,acc_name,event_dt,tx_amt,cntpty_acc_name='id','accname','Event_Dt','Tx_Amt','Cntpty_Acct_Name'
 def build_index(df,MAX_DEPTH,need3=True):
-    df=df.selectExpr(pay_id,f'lower(trim({acc_name})) {acc_name}',tx_amt,f'lower(trim({cntpty_acc_name})) {cntpty_acc_name}',
-                     f"unix_timestamp({event_dt},'yyyy-MM-dd')+float(substring({pay_id},-6))/1e6 time_stamp").filter(f'{acc_name}<>{cntpty_acc_name} and {tx_amt}>0')\
-    .withColumn('lag',F.coalesce(F.lag('time_stamp',-1).over(Window.partitionBy(acc_name,cntpty_acc_name).orderBy('time_stamp')),F.lit(np.inf))).persist()
+    df=df.selectExpr(pay_id,f'lower(trim({acc_name})) {acc_name}',tx_amt,f'lower(trim({cntpty_acc_name})) {cntpty_acc_name}',f"unix_timestamp({event_dt},'yyyy-MM-dd')+float(substring({pay_id},-6))/1e6 time_stamp").filter(f'{acc_name}<>{cntpty_acc_name} and {tx_amt}>0').withColumn('lag',F.coalesce(F.lag('time_stamp',-1).over(Window.partitionBy(acc_name,cntpty_acc_name).orderBy('time_stamp')),F.lit(np.inf))).persist()
     uniq_edge = df.selectExpr(f'{acc_name} a',f'{cntpty_acc_name} b ').groupby(['a','b']).max().persist()
     aconts = uniq_edge.selectExpr('a as n').groupby(['n']).max().union(uniq_edge.selectExpr('b as n').groupby(['n']).max()).groupby('n').max().toPandas().values
     name2id = {j[0]:i for i,j in enumerate(aconts)}
@@ -156,11 +154,7 @@ def drop_duplicates(iterator):
                 yield item
 srcs_rdd = sc.parallelize(srcs,min(P,max(len(srcs),1)))
 space3 = srcs_rdd.mapPartitions(prepares).persist()
-chains_deeper = space3.mapPartitions(deep_search)\
-.repartitionAndSortWithinPartitions(P,partitionFunc = lambda x:portable_hash((x[0],x[1])))\
-.mapPartitions(main).distinct()\
-.repartitionAndSortWithinPartitions(P,partitionFunc = lambda x:portable_hash((x[0],x[1])))\
-.mapPartitions(drop_duplicates).persist()
+chains_deeper = space3.mapPartitions(deep_search).repartitionAndSortWithinPartitions(P,lambda x:portable_hash((x[0],x[1]))).mapPartitions(main).distinct().repartitionAndSortWithinPartitions(P,lambda x:portable_hash((x[0],x[1]))).mapPartitions(drop_duplicates).persist()
 if need3 :
     deeper_id_set = [set(i) for i in chains_deeper.map(lambda x:x[1][-1]).collect()]
     def downward_drop_duplicates(iterator):
@@ -173,9 +167,7 @@ if need3 :
                     break
             if not_sub:
                 yield item
-    chains3 = space3.repartitionAndSortWithinPartitions(P,partitionFunc = lambda x:portable_hash((x[0],x[1])))\
-    .mapPartitions(main).distinct().repartitionAndSortWithinPartitions(P,partitionFunc = lambda x:portable_hash((x[0],x[1])))\
-    .mapPartitions(drop_duplicates).mapPartitions(downward_drop_duplicates)
+    chains3 = space3.repartitionAndSortWithinPartitions(P,lambda x:portable_hash((x[0],x[1]))).mapPartitions(main).distinct().repartitionAndSortWithinPartitions(P,lambda x:portable_hash((x[0],x[1]))).mapPartitions(drop_duplicates).mapPartitions(downward_drop_duplicates)
     space3.unpersist()
     result = chains_deeper.union(chains3).zipWithIndex()
     chains_deeper.unpersist()
