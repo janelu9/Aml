@@ -21,7 +21,7 @@ You can run
 
 ![1](https://user-images.githubusercontent.com/24219258/149096741-85d7c637-a8bc-489e-a499-9f4a1eb047ea.png)
 
-|id|batch_id|src|dst|amount|depth|accname|  Event_Dt|Tx_Amt|Cntpty_Acct_Name|
+|id|chain_id|src|dst|amount|depth|accname|  Event_Dt|Tx_Amt|Cntpty_Acct_Name|
 | -- |--- | --- | ---| ---- |--- | ---- | --------- | ----- | ---- |
 |5068|       0|  a|  e|     200.0|     4|      a|2020-01-01|  20.0|               b|
 |5070|       0|  a|  e|     200.0|     4|      a|2020-01-03| 180.0|               b|
@@ -35,7 +35,7 @@ You can run
 |5070|       1|  a|  c|     500.0|     3|      a|2020-01-03| 180.0|               b|
 |5072|       1|  a|  c|     500.0|     3|      b|2020-01-03| 500.0|               c|
 
-Same 'batch_id' indicates these transactions belong to a complete chain. Field 'depth' indicates the length of the chain. Enjoy it ! 🤗
+Same 'chain_id' indicates these transactions belong to a complete chain. Field 'depth' indicates the length of the chain. Enjoy it ! 🤗
 
 ## References
 

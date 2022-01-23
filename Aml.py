@@ -185,6 +185,6 @@ def flatID(iterator):
     for (k,(*v,s)),idx in iterator:
         for payid in s:
             yield (idx,id2name[k[0]],id2name[k[1]],v[0],v[1],int(payid))
-result = result.mapPartitions(flatID).toDF(f'''batch_id: int, src: string, dst: string, amount: float, depth: int, {pay_id}: int''')
+result = result.mapPartitions(flatID).toDF(f'''chain_id: int, src: string, dst: string, amount: float, depth: int, {pay_id}: int''')
 result.join(df,pay_id,'left').repartition(1).write.parquet("hdfs://localhost:9000/result",mode = 'overwrite')
 spark.read.parquet("hdfs://localhost:9000/result").show()
