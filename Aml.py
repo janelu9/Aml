@@ -46,7 +46,7 @@ def build_index(df,MAX_DEPTH,need3=True):
     for i in D:
         for j in D[i]:
             D[i][j] = np.array(sorted(D[i][j],key = lambda x:x[1]),dtype = float)
-    return D,srcs,{v:k for k,v in name2id.items()}
+    return D,srcs,{v:k for k,v in name2id.items() if v in srcs or v in dsts}
 T = 5*86400;
 SIGMA = 0.05;
 MAX_DEPTH = 4;
