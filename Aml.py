@@ -12,7 +12,7 @@ conf.set("spark.hadoop.mapred.output.compress", "false")
 spark = SparkSession.builder.config(conf = conf).enableHiveSupport().getOrCreate()
 sc = spark.sparkContext
 
-from some_ideas import Lu_iteration,accurate_search,fast_search
+from some_ideas import lu_iteration,accurate_search,fast_search
 import numpy as np
 
 df = spark.read.parquet("hdfs://localhost:9000/data")
@@ -25,7 +25,7 @@ def build_index(df,MAX_DEPTH,need2=True):
     edges = uniq_edge.rdd.map(lambda x:(name2id[x[0]],name2id[x[1]])).toDF(['a','b']).toPandas().values
     uniq_edge.unpersist()
     depth=2 if need2 else MAX_DEPTH
-    srcs,nodes_set,dsts=Lu_iteration(edges,depth)
+    srcs,nodes_set,dsts=lu_iteration(edges,depth)
     if not srcs:return {},set(),{}
     def filtrate(iterator):
         for i in iterator:
@@ -153,8 +153,8 @@ def drop_duplicates(iterator):
                 base[k].append(s)
                 yield item
 srcs_rdd = sc.parallelize(srcs,min(P,max(len(srcs),1)))
-space3 = srcs_rdd.mapPartitions(prepares).persist()
-chains_deeper = space3.mapPartitions(deep_search).repartitionAndSortWithinPartitions(P,lambda x:portable_hash((x[0],x[1]))).mapPartitions(main).distinct().repartitionAndSortWithinPartitions(P,lambda x:portable_hash((x[0],x[1]))).mapPartitions(drop_duplicates).persist()
+space2 = srcs_rdd.mapPartitions(prepares).persist()
+chains_deeper = space2.mapPartitions(deep_search).repartitionAndSortWithinPartitions(P,lambda x:portable_hash((x[0],x[1]))).mapPartitions(main).distinct().repartitionAndSortWithinPartitions(P,lambda x:portable_hash((x[0],x[1]))).mapPartitions(drop_duplicates).persist()
 if need2 :
     deeper_id_set = [set(i) for i in chains_deeper.map(lambda x:x[1][-1]).collect()]
     def downward_drop_duplicates(iterator):
@@ -167,9 +167,9 @@ if need2 :
                     break
             if not_sub:
                 yield item
-    chains3 = space3.repartitionAndSortWithinPartitions(P,lambda x:portable_hash((x[0],x[1]))).mapPartitions(main).distinct().repartitionAndSortWithinPartitions(P,lambda x:portable_hash((x[0],x[1]))).mapPartitions(drop_duplicates).mapPartitions(downward_drop_duplicates)
-    space3.unpersist()
-    result = chains_deeper.union(chains3).zipWithIndex()
+    chains2 = space2.repartitionAndSortWithinPartitions(P,lambda x:portable_hash((x[0],x[1]))).mapPartitions(main).distinct().repartitionAndSortWithinPartitions(P,lambda x:portable_hash((x[0],x[1]))).mapPartitions(drop_duplicates).mapPartitions(downward_drop_duplicates)
+    space2.unpersist()
+    result = chains_deeper.union(chains2).zipWithIndex()
     chains_deeper.unpersist()
 else:
     result = chains_deeper.zipWithIndex()
