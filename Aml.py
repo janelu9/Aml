@@ -22,7 +22,7 @@ def build_index(df,MAX_DEPTH,need2=True):
     uniq_edge = df.selectExpr(f'{acc_name} a',f'{cntpty_acc_name} b ').groupby(['a','b']).max().persist()
     aconts = uniq_edge.selectExpr('a as n').groupby(['n']).max().union(uniq_edge.selectExpr('b as n').groupby(['n']).max()).groupby('n').max().toPandas().values
     name2id = {j[0]:i for i,j in enumerate(aconts)}
-    edges = uniq_edge.rdd.map(lambda x:(name2id[x[0]],name2id[x[1]])).toDF(['a','b']).toPandas().values
+    edges = uniq_edge.rdd.map(lambda x:(name2id[x[0]],name2id[x[1]])).collect()
     uniq_edge.unpersist()
     depth=2 if need2 else MAX_DEPTH
     srcs,nodes_set,dsts=lu_iteration(edges,depth)
