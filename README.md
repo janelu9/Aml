@@ -30,17 +30,10 @@ You can run
 |5074|       0|  a|  e|     200.0|     3|      b|2020-01-03| 150.0|               d|
 |5075|       0|  a|  e|     200.0|     3|      c|2020-01-04|  50.0|               e|
 |5076|       0|  a|  e|     200.0|     3|      d|2020-01-04| 150.0|               e|
-|5068|       1|  a|  c|     500.0|     2|      a|2020-01-01|  20.0|               b|
-|5069|       1|  a|  c|     500.0|     2|      a|2020-01-02| 300.0|               b|
-|5070|       1|  a|  c|     500.0|     2|      a|2020-01-03| 180.0|               b|
-|5072|       1|  a|  c|     500.0|     2|      b|2020-01-03| 500.0|               c|
+
 
 Same 'chain_id' indicates these transactions belong to a complete chain. Field 'depth' shows the length of the chain. Enjoy it ! 🤗
 
 ## References
 
-\[1\] [Harris C R, Millman K J, van der Walt S J, et al. Array programming with NumPy[J]. Nature, 2020, 585(7825): 357-362.](https://doi.org/10.1038/s41586-020-2649-2)
-
-\[2\] [Zaharia M, Chowdhury M, Franklin M J, et al. Spark: Cluster computing with working sets[J]. HotCloud, 2010, 10(10-10): 95.](https://www2.eecs.berkeley.edu/Pubs/TechRpts/2010/EECS-2010-53.html)
-
-\[3\] [Combination Sum II](https://leetcode.com/problems/combination-sum-ii/solution/)
+\[1\] [Zaharia M, Chowdhury M, Franklin M J, et al. Spark: Cluster computing with working sets[J]. HotCloud, 2010, 10(10-10): 95.](https://www2.eecs.berkeley.edu/Pubs/TechRpts/2010/EECS-2010-53.html)
