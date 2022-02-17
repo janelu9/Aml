@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 # coding: utf-8
-#@author: Lu Jian Email:janelu@live.cn; lujian@sdc.icbc.com.cn Created on Thu Nov 9 10:38:29 2021
+# Created on Thu Nov 9 10:38:29 2021
+# @author: Lu Jian
+# Email:janelu@live.cn; lujian@sdc.icbc.com.cn
 
 from pyspark.sql import SparkSession,Window,functions as F
 from pyspark.conf import SparkConf
@@ -11,24 +13,22 @@ conf = SparkConf()
 conf.set("spark.hadoop.mapred.output.compress", "false")
 spark = SparkSession.builder.config(conf = conf).enableHiveSupport().getOrCreate()
 
-from some_ideas import lu_iteration,groupByNode,filterByDate,fast_search,accurate_search
+from some_ideas import lu_iteration,groupByNode,joinAndFilterByDate,fast_search,accurate_search
  
-T = 5*86400;SIGMA = 0.05;MAX_DEPTH = 3;P = 16;LIMIT = 20; 
 data = spark.read.parquet("hdfs://localhost:9000/data")
+T = 5;SIGMA = 0.05;DEPTH = 3;P = 16;LIMIT = 20;RECYCLE = False
 pay_id,acc_name,event_dt,tx_amt,cntpty_acc_name='id','accname','Event_Dt','Tx_Amt','Cntpty_Acct_Name'
-df=data.selectExpr(pay_id,f'lower(trim({acc_name})) {acc_name}',tx_amt,f'lower(trim({cntpty_acc_name})) {cntpty_acc_name}',f"unix_timestamp({event_dt},'yyyy-MM-dd')+float(substring({pay_id},-6))/1e6 time_stamp").filter(f'{acc_name}<>{cntpty_acc_name} and {tx_amt}>0').withColumn('lag',F.coalesce(F.lag('time_stamp',-1).over(Window.partitionBy(acc_name,cntpty_acc_name).orderBy('time_stamp')),F.lit(float('inf'))))
+df=data.selectExpr(pay_id,f'lower(trim({acc_name})) {acc_name}',tx_amt,f'lower(trim({cntpty_acc_name})) {cntpty_acc_name}',f"unix_timestamp({event_dt},'yyyy-MM-dd')+float(substring({pay_id},-6))/1e6 time_stamp").filter(f'{acc_name}<>{cntpty_acc_name} and {tx_amt}>0').withColumn('lag',F.coalesce(F.lag('time_stamp',-1).over(Window.partitionBy(acc_name,cntpty_acc_name).orderBy('time_stamp')),F.lit(float('inf')))).persist(StorageLevel(True, True, False, False, 1))
 uniq_edge = df.selectExpr(f'{acc_name} a',f'{cntpty_acc_name} b ').groupby(['a','b']).max()
-srcs,bridges,dsts = lu_iteration(uniq_edge,MAX_DEPTH)
-s, e = srcs, dsts
-for n in bridges:
-    s=s.union(n)
-    e=e.union(n)
-edges=df.join(e.withColumnRenamed('n',cntpty_acc_name),cntpty_acc_name,'leftsemi').join(s.withColumnRenamed('n',acc_name),acc_name,'leftsemi')          
-D=edges.rdd.map(lambda x:((x[0],x[1],x[4]),(x[2],x[3],x[5]))).repartitionAndSortWithinPartitions(P,lambda x:portable_hash((x[0],x[1]))).mapPartitions(groupByNode).persist(StorageLevel(True, True, False, False, 1))
-D.count()
-srcs_rdd = edges.join(srcs.withColumnRenamed('n',acc_name),acc_name,'leftsemi').rdd.map(lambda x:(x[1],([x[0]],[[x[2],x[4],x[5],x[3]]])))
-for step in range(0,MAX_DEPTH-1):
-    srcs_rdd = srcs_rdd.join(D,P).mapPartitions(lambda x:filterByDate(x,T))                               
+DEPTH = max(DEPTH,2)
+T*=86400
+bridges = lu_iteration(uniq_edge,DEPTH)
+srcs_rdd = df.join(bridges[1].withColumnRenamed('n',cntpty_acc_name),cntpty_acc_name,'leftsemi').join(bridges[0].withColumnRenamed('n',acc_name),acc_name,'leftsemi').rdd.map(lambda x:(x[1],([x[0],x[1]],[[x[2],x[4],x[5],x[3]]])))
+for i in range(1,len(bridges)-2):
+    D=df.join(bridges[i+1].withColumnRenamed('n',cntpty_acc_name),cntpty_acc_name,'leftsemi').join(bridges[i].withColumnRenamed('n',acc_name),acc_name,'leftsemi').rdd.map(lambda x:((x[0],x[1],x[4]),(x[2],x[3],x[5]))).repartitionAndSortWithinPartitions(P,lambda x:portable_hash((x[0],x[1]))).mapPartitions(groupByNode)
+    srcs_rdd=srcs_rdd.union(D).groupByKey(P).flatMapValues(lambda x:joinAndFilterByDate(x,T)).map(lambda x:(x[1][0][-1],x[1]))
+D=df.join(bridges[-1].withColumnRenamed('n',cntpty_acc_name),cntpty_acc_name,'leftsemi').join(bridges[-2].withColumnRenamed('n',acc_name),acc_name,'leftsemi').rdd.map(lambda x:((x[0],x[1],x[4]),(x[2],x[3],x[5]))).repartitionAndSortWithinPartitions(P,lambda x:portable_hash((x[0],x[1]))).mapPartitions(groupByNode)
+srcs_rdd=srcs_rdd.union(D).groupByKey(P).flatMapValues(lambda x:joinAndFilterByDate(x,T,RECYCLE)).map(lambda x:((x[1][0][0],x[1][0][-1],x[1][1][0][1],x[1][1][-1][1]),x[1]))
 def graph_detect(batch,node,SIGMA,LIMIT):
     r = fast_search(batch,node,SIGMA)
     if r is not None:
@@ -90,7 +90,7 @@ def drop_duplicates(iterator):
             if not_sub:
                 base[k].append(s)
                 yield item
-chains = srcs_rdd.map(lambda x:((x[1][0][0],x[0],x[1][1][0][1],x[1][1][-1][1]),(x[1][0]+[x[0]],x[1][1]))).repartitionAndSortWithinPartitions(P,lambda x:portable_hash((x[0],x[1]))).mapPartitions(main).distinct().repartitionAndSortWithinPartitions(P,lambda x:portable_hash((x[0],x[1]))).mapPartitions(drop_duplicates).zipWithIndex()
+chains = srcs_rdd.repartitionAndSortWithinPartitions(P,lambda x:portable_hash((x[0],x[1]))).mapPartitions(main).distinct().repartitionAndSortWithinPartitions(P,lambda x:portable_hash((x[0],x[1]))).mapPartitions(drop_duplicates).zipWithIndex()
 def flatID(iterator):
     for (k,(*v,s)),idx in iterator:
         for payid in s:
