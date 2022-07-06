@@ -2,7 +2,7 @@
 # coding: utf-8
 # Created on Thu Nov 9 10:38:29 2021
 # @author: Lu Jian
-# Email:janelu@live.cn; lujian@sdc.icbc.com.cn
+# Email:janelu@live.cn;
 
 from pyspark.sql import SparkSession,Window,functions as F
 from pyspark.conf import SparkConf
