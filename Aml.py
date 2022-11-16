@@ -16,8 +16,8 @@ spark = SparkSession.builder.config(conf = conf).enableHiveSupport().getOrCreate
 
 from build_functions import fast_search,accurate_search
  
-data = spark.read.parquet("hdfs://localhost:9000/data")
-T = 5;SIGMA = 0.05;DEPTH = 3;P = 16;LIMIT = 20;RECYCLE = False
+data = spark.read.parquet("hdfs://localhost:9000/data5")
+T = 5;SIGMA = 0.05;DEPTH = 2;P = 16;LIMIT = 10;RECYCLE = False
 pay_id,acc_name,event_dt,tx_amt,cntpty_acc_name='id','accname','Event_Dt','Tx_Amt','Cntpty_Acct_Name'
 df=data.selectExpr(pay_id,f'lower(trim({acc_name})) {acc_name}',tx_amt,f'lower(trim({cntpty_acc_name})) {cntpty_acc_name}',f"unix_timestamp({event_dt},'yyyy-MM-dd')+float(substring({pay_id},-6))/1e6 time_stamp").filter(f'{acc_name}<>{cntpty_acc_name} and {tx_amt}>0').withColumn('lag',F.coalesce(F.lag('time_stamp',-1).over(Window.partitionBy(acc_name,cntpty_acc_name).orderBy('time_stamp')),F.lit(float('inf')))).persist(StorageLevel(True, True, False, False, 1))
 uniq_edge = df.selectExpr(f'{acc_name} a',f'{cntpty_acc_name} b ').groupby(['a','b']).max()
